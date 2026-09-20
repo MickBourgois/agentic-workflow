@@ -1,0 +1,14 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card", "status", "state", "head", "pr", "summary"],
+  "properties": {
+    "card": { "type": "string" },
+    "status": { "enum": ["done", "needs_human", "failed"] },
+    "state": { "enum": ["DONE", "NEEDS_HUMAN", "FAILED"] },
+    "head": { "type": ["string", "null"] },
+    "pr": { "type": ["string", "null"] },
+    "summary": { "type": "string" }
+  }
+}
