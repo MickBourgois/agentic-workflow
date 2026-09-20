@@ -9,6 +9,12 @@ The repository is the source of truth. Consumer projects receive managed copies
 plus a small project-owned configuration file. Updates are checksum-aware and do
 not silently overwrite local edits.
 
+## Presentation website
+
+Run `npm run site:dev` to open the French presentation and documentation website
+at `http://127.0.0.1:4173`. Build the static files with `npm run site:build`.
+See [website/README.md](website/README.md) for hosting and configuration.
+
 ## What is it?
 
 The workflow packages:

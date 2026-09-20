@@ -8,3 +8,4 @@ coverage/
 !.env.example
 .agent-workflow.local.json
 .delivery/
+website/dist/
