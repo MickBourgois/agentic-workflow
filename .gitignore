@@ -1,0 +1,10 @@
+.DS_Store
+node_modules/
+coverage/
+.tmp/
+*.log
+.env
+.env.*
+!.env.example
+.agent-workflow.local.json
+.delivery/

@@ -1,0 +1,58 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://example.invalid/agentic-workflow/config.schema.json",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": { "type": "string" },
+    "tracker": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "provider": { "const": "linear" },
+        "team": { "type": ["string", "null"] },
+        "cardPattern": { "type": "string" },
+        "statuses": { "type": "object", "additionalProperties": { "type": "string" } },
+        "labels": { "type": "object", "additionalProperties": { "type": "string" } }
+      }
+    },
+    "git": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "remote": { "type": "string" },
+        "baseBranch": { "type": "string" },
+        "branchPattern": { "type": "string" }
+      }
+    },
+    "commands": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "install": { "type": "string" },
+        "fullCheck": { "type": "string" }
+      }
+    },
+    "worktree": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": { "root": { "type": "string" } }
+    },
+    "environment": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "copyFiles": { "type": "array", "items": { "type": "string" } },
+        "warnings": { "type": "array", "items": { "type": "string" } }
+      }
+    },
+    "delivery": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "maxReworkCycles": { "type": "integer", "minimum": 0 },
+        "maxEscalations": { "type": "integer", "minimum": 0 }
+      }
+    }
+  }
+}
