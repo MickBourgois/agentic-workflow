@@ -1,0 +1,18 @@
+{
+  "$schema": ".agent-workflow/config.schema.json",
+  "tracker": {
+    "provider": "linear",
+    "team": null
+  },
+  "git": {
+    "baseBranch": "auto"
+  },
+  "commands": {
+    "install": "auto",
+    "fullCheck": "auto"
+  },
+  "environment": {
+    "copyFiles": [],
+    "warnings": []
+  }
+}

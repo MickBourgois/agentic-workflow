@@ -1,0 +1,6 @@
+{
+  "commands": {
+    "install": "auto",
+    "fullCheck": "auto"
+  }
+}
