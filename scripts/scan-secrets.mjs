@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const roots = [
-  'workflow', 'scripts', 'tests', 'docs', '.github',
+  'workflow', 'scripts', 'tests', 'docs', '.github', 'website',
   'README.md', 'AGENTS.md', 'CLAUDE.md', 'package.json', 'package-lock.json',
   'install.sh', 'update.sh',
 ]
@@ -24,7 +24,7 @@ async function files(path) {
   if (!entries) return [absolute]
   const output = []
   for (const entry of entries) {
-    if (entry.name === '.git' || entry.name === 'node_modules') continue
+    if (entry.name === '.git' || entry.name === 'node_modules' || entry.name === 'dist') continue
     const child = resolve(absolute, entry.name)
     if (entry.isDirectory()) output.push(...await files(relative(root, child)))
     else if (entry.isFile()) output.push(child)
