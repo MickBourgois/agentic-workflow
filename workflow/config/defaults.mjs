@@ -44,28 +44,28 @@ export const WORKFLOW_DEFAULTS = Object.freeze({
 
 export const ROUTES = Object.freeze({
   simple: {
-    implementation: { model: 'gpt-5.6-terra', reasoning: 'medium' },
-    reviewers: [{ model: 'gpt-5.6-terra', reasoning: 'medium' }],
+    implementation: { model: 'gpt-6-sol', reasoning: 'medium' },
+    reviewers: [{ model: 'gpt-6-sol', reasoning: 'medium' }],
   },
   standard: {
-    implementation: { model: 'gpt-5.6-terra', reasoning: 'high' },
-    reviewers: [{ model: 'gpt-5.6-terra', reasoning: 'high' }],
+    implementation: { model: 'gpt-6-sol', reasoning: 'high' },
+    reviewers: [{ model: 'gpt-6-sol', reasoning: 'high' }],
   },
   complex: {
-    implementation: { model: 'gpt-5.6-sol', reasoning: 'medium' },
-    reviewers: [{ model: 'gpt-5.6-sol', reasoning: 'high' }],
+    implementation: { model: 'gpt-6-sol', reasoning: 'medium' },
+    reviewers: [{ model: 'gpt-6-sol', reasoning: 'high' }],
   },
   critical: {
-    implementation: { model: 'gpt-5.6-sol', reasoning: 'high' },
+    implementation: { model: 'gpt-6-astra', reasoning: 'high' },
     reviewers: [
-      { model: 'gpt-5.6-sol', reasoning: 'high' },
-      { model: 'gpt-5.6-terra', reasoning: 'high' },
+      { model: 'gpt-6-astra', reasoning: 'high' },
+      { model: 'gpt-6-sol', reasoning: 'high' },
     ],
   },
 })
 
 export const FIXED_ROUTES = Object.freeze({
-  orchestrator: { model: 'gpt-5.6-terra', reasoning: 'medium' },
-  backlogSelector: { model: 'gpt-5.6-luna', reasoning: 'low' },
-  shipper: { model: 'gpt-5.6-terra', reasoning: 'medium' },
+  orchestrator: { model: 'gpt-6-sol', reasoning: 'medium' },
+  backlogSelector: { model: 'gpt-6-luna', reasoning: 'low' },
+  shipper: { model: 'gpt-6-sol', reasoning: 'medium' },
 })

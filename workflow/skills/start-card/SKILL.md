@@ -72,7 +72,7 @@ completely fresh review on the new head. Any commit invalidates prior approvals.
 
 ## 5. Dispatch shipping
 
-After `APPROVED`, spawn `shipper` with no inherited turns on the fixed Terra /
+After `APPROVED`, spawn `shipper` with no inherited turns on the fixed Sol /
 medium route. Pass only card, worktree, approved head, validation, and exact-head
 receipts. Require `/ship-production-change`. Accept `DONE` only after merge on the
 configured base, tracker completion, and required deployment proof.

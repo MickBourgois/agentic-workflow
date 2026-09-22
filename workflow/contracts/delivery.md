@@ -71,16 +71,16 @@ decision.
 
 | Complexity | Implementation | Independent review |
 |---|---|---|
-| `simple` | `gpt-5.6-terra` / `medium` | 1 × `gpt-5.6-terra` / `medium` |
-| `standard` | `gpt-5.6-terra` / `high` | 1 × `gpt-5.6-terra` / `high` |
-| `complex` | `gpt-5.6-sol` / `medium`; `high` for score ≥15 or ambiguity/test difficulty/regression risk ≥2 | 1 × `gpt-5.6-sol` / `high` |
-| `critical` | `gpt-5.6-sol` / `high` | A: `gpt-5.6-sol` / `high`; B: `gpt-5.6-terra` / `high` |
+| `simple` | `gpt-6-sol` / `medium` | 1 × `gpt-6-sol` / `medium` |
+| `standard` | `gpt-6-sol` / `high` | 1 × `gpt-6-sol` / `high` |
+| `complex` | `gpt-6-sol` / `medium`; `high` for score ≥15 or ambiguity/test difficulty/regression risk ≥2 | 1 × `gpt-6-sol` / `high` |
+| `critical` | `gpt-6-astra` / `high` | A: `gpt-6-astra` / `high`; B: `gpt-6-sol` / `high` |
 
-Rework uses the implementation route. One bounded escalation maps any Terra route
-or Sol `medium` route to Sol `high`; Sol `high` has no automatic model escalation.
-The orchestrator and shipper use Terra / medium. The backlog selector uses Luna /
-low. No route uses `xhigh`. `workflow/config/defaults.mjs` is the executable source
-of truth and the routing tests protect this table.
+Rework uses the implementation route. One bounded escalation maps any Sol
+`medium` route to Sol `high`; Sol `high` and Astra `high` have no automatic model
+escalation. The orchestrator and shipper use Sol / medium. The backlog selector
+uses Luna / low. No route uses `xhigh`. `workflow/config/defaults.mjs` is the
+executable source of truth and the routing tests protect this table.
 
 ## Fresh-context phase contracts
 

@@ -89,7 +89,7 @@ test('installed runtime is independent from the source checkout', async () => {
   const output = execFileSync(process.execPath, [
     join(repo, '.agent-workflow/bin/agent-workflow.mjs'), 'route', 'standard', '--repo', repo,
   ], { encoding: 'utf8' })
-  assert.equal(JSON.parse(output).implementation.model, 'gpt-5.6-terra')
+  assert.equal(JSON.parse(output).implementation.model, 'gpt-6-sol')
 
   const manifest = JSON.parse(await readFile(join(repo, '.agent-workflow/manifest.json'), 'utf8'))
   for (const path of Object.keys(manifest.files)) {

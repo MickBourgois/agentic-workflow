@@ -18,17 +18,17 @@ function receipt(head, status = 'approved', slot = 'single') {
   return { reviewed_head: head, status, reviewer_slot: slot }
 }
 
-test('simple routes to Terra medium with one Terra medium reviewer', () => {
+test('simple routes to Sol medium with one Sol medium reviewer', () => {
   assert.deepEqual(routeFor('simple'), {
-    implementation: { model: 'gpt-5.6-terra', reasoning: 'medium' },
-    reviewers: [{ model: 'gpt-5.6-terra', reasoning: 'medium' }],
+    implementation: { model: 'gpt-6-sol', reasoning: 'medium' },
+    reviewers: [{ model: 'gpt-6-sol', reasoning: 'medium' }],
   })
 })
 
-test('standard routes to Terra high with one Terra high reviewer', () => {
+test('standard routes to Sol high with one Sol high reviewer', () => {
   assert.deepEqual(routeFor('standard'), {
-    implementation: { model: 'gpt-5.6-terra', reasoning: 'high' },
-    reviewers: [{ model: 'gpt-5.6-terra', reasoning: 'high' }],
+    implementation: { model: 'gpt-6-sol', reasoning: 'high' },
+    reviewers: [{ model: 'gpt-6-sol', reasoning: 'high' }],
   })
 })
 
@@ -40,6 +40,11 @@ test('complex uses Sol high when score or risk dimension reaches the high-effort
 
 test('critical requires two independent exact-head review slots', () => {
   let state = createDeliveryState({ card: 'PROJ-201', complexity: 'critical' })
+  assert.deepEqual(state.route.implementation, { model: 'gpt-6-astra', reasoning: 'high' })
+  assert.deepEqual(state.route.reviewers, [
+    { model: 'gpt-6-astra', reasoning: 'high' },
+    { model: 'gpt-6-sol', reasoning: 'high' },
+  ])
   state = implemented(state, 'critical-head')
   assert.throws(() => transitionDeliveryState(state, 'review_approved', {
     receipts: [receipt('critical-head', 'approved', 'A')],
@@ -69,11 +74,11 @@ test('rework invalidates receipts and stops after the configured cycle limit', (
 })
 
 test('a repeated blocker escalates once and then becomes human work', () => {
-  let state = createDeliveryState({ card: 'PROJ-203', complexity: 'standard' })
+  let state = createDeliveryState({ card: 'PROJ-203', complexity: 'simple' })
   state = transitionDeliveryState(state, 'start_implementation')
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
-  assert.deepEqual(state.route.implementation, { model: 'gpt-5.6-sol', reasoning: 'high' })
+  assert.deepEqual(state.route.implementation, { model: 'gpt-6-sol', reasoning: 'high' })
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
   assert.equal(state.state, 'NEEDS_HUMAN')
 })

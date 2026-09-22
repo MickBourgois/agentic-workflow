@@ -35,9 +35,9 @@ export function routeFor(complexity, evidence = {}) {
 
 export function escalateImplementationRoute(route) {
   const current = route.implementation
-  if (current.model === 'gpt-5.6-sol' && current.reasoning === 'high') return null
+  if (['gpt-6-astra', 'gpt-6-sol'].includes(current.model) && current.reasoning === 'high') return null
   const escalated = copy(route)
-  escalated.implementation = { model: 'gpt-5.6-sol', reasoning: 'high' }
+  escalated.implementation = { model: 'gpt-6-sol', reasoning: 'high' }
   return escalated
 }
 

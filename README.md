@@ -247,14 +247,15 @@ are thin adapters that read those same files, avoiding two drifting copies.
 
 | Complexity | Implementation | Review |
 |---|---|---|
-| simple | Terra / medium | 1 × Terra / medium |
-| standard | Terra / high | 1 × Terra / high |
+| simple | Sol / medium | 1 × Sol / medium |
+| standard | Sol / high | 1 × Sol / high |
 | complex | Sol / medium; Sol / high for score ≥15 or high-risk dimensions | 1 × Sol / high |
-| critical | Sol / high | Sol / high + Terra / high, independent |
+| critical | Astra / high | Astra / high + Sol / high, independent |
 
 Rework follows implementation routing. A repeated matching blocker gets at most
-one escalation to Sol / high. The orchestrator and shipper use Terra / medium;
-the backlog selector uses Luna / low. The executable routing source is
+one escalation to Sol / high. Astra / high and Sol / high routes do not escalate.
+The orchestrator and shipper use Sol / medium; the backlog selector uses Luna /
+low. The executable routing source is
 `workflow/config/defaults.mjs` and is covered by tests.
 
 ## Tests and security
@@ -277,8 +278,8 @@ before release.
 
 ## Versioning
 
-`VERSION` and `package.json` begin at `0.1.0`. Releases are intended to use SemVer
-tags such as `v0.1.0`, `v0.2.0`, and `v1.0.0`.
+The current release is `0.2.0`. Releases use SemVer tags such as `v0.2.0` and
+`v1.0.0`.
 
 ## Current limitations
 
