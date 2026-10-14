@@ -39,6 +39,15 @@ is always generated. Social metadata includes an SVG preview; some social
 platforms require a PNG instead, so convert that illustration before relying on
 link cards for a launch.
 
+For the current public URL, build with
+`SITE_BASE_PATH=/agentic-workflow SITE_URL=https://mbourgois.fr npm run site:build`.
+The site source imports the routing table from `workflow/config/defaults.mjs`,
+so rebuilding includes model changes without editing generated HTML. The Vercel
+project `mbourgoisfr` builds this site from an immutable commit of this repository;
+its `config/agentic-workflow.json` records the commit and archive checksum. After
+merging a source change, update that pin in `MickBourgois/mbourgoisfr` to publish it.
+Its `prebuild` step then generates the static files under `/agentic-workflow`.
+
 On Vercel, use build command `npm run site:build` and output directory
 `website/dist`. GitHub Pages also supports these static files; build with the
 repository base path. Publishing remains an explicit separate operation.

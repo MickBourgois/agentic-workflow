@@ -20,7 +20,10 @@ const paths = {
 
 export const icon = (name, className = '') => `<svg class="icon ${className}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] ?? paths.arrow}</svg>`
 export const mark = `<svg viewBox="0 0 32 32" fill="none" aria-hidden="true"><path d="M5 8h10v6h12M5 24h10v-6h12M15 8V4M15 24v4" stroke="currentColor" stroke-width="2"/><circle cx="5" cy="8" r="3" fill="currentColor"/><circle cx="5" cy="24" r="3" fill="currentColor"/><rect x="23" y="11" width="6" height="10" rx="2" fill="currentColor"/></svg>`
-export const modelName = (model) => model.replace(/^gpt-[\d.]+-/, '').replace(/^./, (letter) => letter.toUpperCase())
+export const modelName = (model) => {
+  const match = /^gpt-([\d.]+)-(.+)$/.exec(model)
+  return match ? `${match[2].replace(/^./, (letter) => letter.toUpperCase())} ${match[1]}` : model
+}
 export const routeLabel = (route) => `${modelName(route.model)} <span>/ ${escapeHtml(route.reasoning)}</span>`
 
 export function codeBlock(code, label = 'Terminal') {
