@@ -58,7 +58,7 @@ test('update changes pristine managed files and preserves project configuration'
 
   const source2 = await mkdtemp(join(tmpdir(), 'agent-workflow-source-'))
   await cp(SOURCE, source2, { recursive: true, filter: (path) => !path.includes(`${join(SOURCE, '.git')}`) })
-  await writeFile(join(source2, 'VERSION'), '0.2.0\n')
+  await writeFile(join(source2, 'VERSION'), '0.3.1\n')
   const managedSource = join(source2, 'workflow/skills/rework/SKILL.md')
   await writeFile(managedSource, `${await readFile(managedSource, 'utf8')}\n<!-- update-proof -->\n`)
 
@@ -66,7 +66,7 @@ test('update changes pristine managed files and preserves project configuration'
   assert.match(result.stdout, /updated [1-9]/)
   assert.match(await readFile(join(repo, '.agents/skills/rework/SKILL.md'), 'utf8'), /update-proof/)
   assert.equal(await readFile(configPath, 'utf8'), config)
-  assert.equal((await readFile(join(repo, '.agent-workflow/VERSION'), 'utf8')).trim(), '0.2.0')
+  assert.equal((await readFile(join(repo, '.agent-workflow/VERSION'), 'utf8')).trim(), '0.3.1')
 })
 
 test('update reports a conflict and never overwrites a modified managed file', async () => {
