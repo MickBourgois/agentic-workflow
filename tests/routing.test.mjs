@@ -1,5 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { FIXED_ROUTES } from '../workflow/config/defaults.mjs'
 import {
   createDeliveryState,
   routeFor,
@@ -18,17 +19,25 @@ function receipt(head, status = 'approved', slot = 'single') {
   return { reviewed_head: head, status, reviewer_slot: slot }
 }
 
-test('simple routes to Sol medium with one Sol medium reviewer', () => {
+test('simple routes to Luna low with one Luna high reviewer', () => {
   assert.deepEqual(routeFor('simple'), {
-    implementation: { model: 'gpt-6-sol', reasoning: 'medium' },
-    reviewers: [{ model: 'gpt-6-sol', reasoning: 'medium' }],
+    implementation: { model: 'gpt-6-luna', reasoning: 'low' },
+    reviewers: [{ model: 'gpt-6-luna', reasoning: 'high' }],
   })
 })
 
-test('standard routes to Sol high with one Sol high reviewer', () => {
+test('standard routes to Luna high with one Sol 6.1 medium reviewer', () => {
   assert.deepEqual(routeFor('standard'), {
-    implementation: { model: 'gpt-6-sol', reasoning: 'high' },
-    reviewers: [{ model: 'gpt-6-sol', reasoning: 'high' }],
+    implementation: { model: 'gpt-6-luna', reasoning: 'high' },
+    reviewers: [{ model: 'gpt-6.1-sol', reasoning: 'medium' }],
+  })
+})
+
+test('fixed roles keep Sol 6.1 for orchestration and shipping', () => {
+  assert.deepEqual(FIXED_ROUTES, {
+    orchestrator: { model: 'gpt-6.1-sol', reasoning: 'medium' },
+    backlogSelector: { model: 'gpt-6-luna', reasoning: 'low' },
+    shipper: { model: 'gpt-6.1-sol', reasoning: 'medium' },
   })
 })
 
@@ -40,9 +49,9 @@ test('complex uses Sol high when score or risk dimension reaches the high-effort
 
 test('critical requires two independent exact-head review slots', () => {
   let state = createDeliveryState({ card: 'PROJ-201', complexity: 'critical' })
-  assert.deepEqual(state.route.implementation, { model: 'gpt-6-astra', reasoning: 'high' })
+  assert.deepEqual(state.route.implementation, { model: 'gpt-6.1-sol', reasoning: 'high' })
   assert.deepEqual(state.route.reviewers, [
-    { model: 'gpt-6-astra', reasoning: 'high' },
+    { model: 'gpt-6.1-sol', reasoning: 'high' },
     { model: 'gpt-6-sol', reasoning: 'high' },
   ])
   state = implemented(state, 'critical-head')
@@ -78,7 +87,16 @@ test('a repeated blocker escalates once and then becomes human work', () => {
   state = transitionDeliveryState(state, 'start_implementation')
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
-  assert.deepEqual(state.route.implementation, { model: 'gpt-6-sol', reasoning: 'high' })
+  assert.deepEqual(state.route.implementation, { model: 'gpt-6.1-sol', reasoning: 'high' })
   state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
   assert.equal(state.state, 'NEEDS_HUMAN')
+})
+
+test('standard Luna and complex Sol medium escalate to Sol 6.1 high', () => {
+  for (const complexity of ['standard', 'complex']) {
+    let state = createDeliveryState({ card: 'PROJ-204', complexity })
+    state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
+    state = transitionDeliveryState(state, 'phase_failure', { fingerprint: 'same-failure' })
+    assert.deepEqual(state.route.implementation, { model: 'gpt-6.1-sol', reasoning: 'high' })
+  }
 })

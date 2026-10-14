@@ -247,16 +247,25 @@ are thin adapters that read those same files, avoiding two drifting copies.
 
 | Complexity | Implementation | Review |
 |---|---|---|
-| simple | Sol / medium | 1 × Sol / medium |
-| standard | Sol / high | 1 × Sol / high |
-| complex | Sol / medium; Sol / high for score ≥15 or high-risk dimensions | 1 × Sol / high |
-| critical | Astra / high | Astra / high + Sol / high, independent |
+| simple | Luna 6 / low | 1 × Luna 6 / high |
+| standard | Luna 6 / high | 1 × Sol 6.1 / medium |
+| complex | Sol 6.1 / medium; high for score ≥15 or high-risk dimensions | 1 × Sol 6.1 / high |
+| critical | Sol 6.1 / high | Sol 6.1 / high + Sol 6 / high, independent |
 
 Rework follows implementation routing. A repeated matching blocker gets at most
-one escalation to Sol / high. Astra / high and Sol / high routes do not escalate.
-The orchestrator and shipper use Sol / medium; the backlog selector uses Luna /
-low. The executable routing source is
+one escalation to Sol 6.1 / high. Sol 6.1 / high routes do not escalate.
+The orchestrator and shipper use Sol 6.1 / medium; the backlog selector uses Luna 6 /
+low. Sol 6 remains only as the second critical reviewer to preserve review by
+distinct models. The executable routing source is
 `workflow/config/defaults.mjs` and is covered by tests.
+
+This routing favors Luna for bounded work, Sol 6.1 for broad or sensitive work,
+and a second model for critical review. Reasoning effort grows with the task's
+complexity; it is not fixed at `high` for every phase. Astra is not a default
+route. According to the [OpenAI model catalog](https://developers.openai.com/api/docs/models),
+Sol 6.1 costs one fifth as much as Astra per API input or output token, while
+Luna 6 costs one twentieth as much as Sol 6.1. These are per-token prices, not
+measured workflow savings: reasoning effort and retries also affect usage.
 
 ## Tests and security
 
