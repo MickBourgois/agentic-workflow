@@ -287,7 +287,7 @@ before release.
 
 ## Versioning
 
-The current release is `0.2.0`. Releases use SemVer tags such as `v0.2.0` and
+The current release is `0.3.0`. Releases use SemVer tags such as `v0.3.0` and
 `v1.0.0`.
 
 ## Current limitations
