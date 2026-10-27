@@ -21,6 +21,8 @@ creates substitute evidence.
    approvals.
 2. Run configured full check unless fresh auditable evidence proves this exact
    head. Run remaining card-specific release/migration/security gates.
+   Verify the recorded binding with configured `commands.validationProof` when
+   present; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.
 4. Pull/rebase against the current configured remote/base before push when needed.
    A changed head invalidates approvals and returns to the orchestrator.
@@ -41,5 +43,10 @@ After confirmed merge only, remove this card's clean inactive worktree with
 dirty or active worktrees.
 
 Update the checkpoint to `DONE` with merge, deployment, and cleanup evidence.
+When `commands.completionCheck` is configured, supply its project evidence to
+the state machine's `shipped` event. The command receives state/payload/config on
+stdin and must return a passing proof for the exact head/base/merge. Let the state
+writer generate `.delivery/checkpoints/<CARD>.md`; publish that body to the one
+marked tracker comment and reread it. A failed completion check leaves SHIPPING.
 Return the compact shipping result and stop. Never edit, review, rework, or select
 another card.

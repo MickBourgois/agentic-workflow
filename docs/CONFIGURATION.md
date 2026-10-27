@@ -33,7 +33,9 @@ precedence, is gitignored, and is suitable for machine-only command overrides.
   },
   "commands": {
     "install": "auto",
-    "fullCheck": "auto"
+    "fullCheck": "auto",
+    "validationProof": null,
+    "completionCheck": null
   },
   "worktree": {
     "root": ".delivery/worktrees"
@@ -60,3 +62,9 @@ clear `environment.warnings` message in project config.
 Routing models are workflow behavior, not project configuration. They remain in
 the versioned central defaults so the classification contract has one source of
 truth.
+
+`commands.validationProof` and `commands.completionCheck` optionally name
+project-owned Node entry points. The former binds/verifies immutable full-gate
+receipts. The latter receives state, shipping evidence and resolved config on
+stdin; failure blocks `DONE`. See the project integration contract for the
+protocol. These defaults are null, so existing consumers retain their behavior.

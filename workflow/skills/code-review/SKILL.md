@@ -14,12 +14,23 @@ Require card ID, repository/worktree, base/head SHAs, and reviewer slot (`single
 `A`, or `B`). Resolve both SHAs, require a non-empty diff, and review exactly
 `git diff <base>...<head>` plus affected callers and tests.
 
+When `commands.validationProof` is configured, verify the recorded binding for
+this base/head using that entry point. A raw receipt's precommit head remains
+unchanged; the verifier establishes content/index/blob equality. Consume its
+compact verdict rather than dumping full receipts.
+
 Review every changed file on two axes:
 
 1. **Spec:** missing/partial requirements, scope drift, behavior, edge cases, and
    validation gaps. Reference the exact requirement.
 2. **Standards:** correctness, security, data integrity, concurrency, project
    rules, architecture, regressions, and tests. Ignore tool-enforced style.
+
+For a changed domain rule, trace its authoritative source and applicability
+through calculation, user-visible explanation, documentation, and regression
+tests. Resolve contradictions across those surfaces; a correct numerical result
+alone does not establish a correct explanation. Read project review references
+named by its instructions. This is a judgement review, not a style checklist.
 
 Findings require concrete evidence, tight file/line, P0-P3, and a bounded required
 change or test. Do not invent a quota.

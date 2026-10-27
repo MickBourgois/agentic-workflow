@@ -30,7 +30,9 @@
       "additionalProperties": false,
       "properties": {
         "install": { "type": "string" },
-        "fullCheck": { "type": "string" }
+        "fullCheck": { "type": "string" },
+        "completionCheck": { "type": ["string", "null"] },
+        "validationProof": { "type": ["string", "null"] }
       }
     },
     "worktree": {

@@ -153,6 +153,25 @@ a stale local file.
 
 ## Resume
 
+### Observation ownership
+
+The active phase owns its external watch. During shipping, the shipper owns PR,
+CI, and deployment status; the orchestrator awaits the phase result. Perform one
+independent terminal audit after that result. Emit human updates on a meaningful
+state change, failure, or required action; use a machine-visible heartbeat while
+unchanged, subject to the host's communication requirements.
+
+Prefer a connector's event wait. Where unavailable, GitHub CLI provides a bounded
+tool session with `gh pr checks <PR> --repo <OWNER/REPO> --required --watch
+--fail-fast --interval 30`. Record the head before watching and recheck head/base
+and CI before merge. Missing, skipped, unknown or empty required checks do not
+establish a passing full gate. Never rerun a failed CI solely to keep watching.
+
+Read compact metadata projections from connectors: head/status/conclusion/URL,
+not full commit diffs or issue bodies for a status lookup. Use
+`delivery-state.mjs summary --card <CARD>` for routine local status. Full receipts,
+logs and history stay in files and are read only to investigate a specific issue.
+
 1. Fetch the full card, relations, routing comment, and checkpoint.
 2. Inspect live branches, worktrees, commits, PR, CI, and merge state.
 3. Reconcile to the last state with durable evidence. Approval names the current

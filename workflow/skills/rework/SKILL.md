@@ -22,6 +22,8 @@ security decisions return `needs_human` without edits.
 5. Run affected proof, invalidated card checks, and configured full check.
 6. Create one card/finding-referencing commit, update the checkpoint to
    `REVIEWING`, and increment the cycle.
+   Use configured `commands.validationProof` to bind the immutable full-gate
+   receipt to that commit; persist the actual returned path, never a guessed name.
 
 Return card, `rework_complete`, previous/new SHA, findings addressed, validation,
 and unresolved blockers. Then stop. Rework never starts the next review or ships.
