@@ -275,7 +275,9 @@ export function deliverySummary(state) {
 }
 
 export function deliveryCheckpoint(state) {
-  return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(deliverySummary(state), null, 2) + '\n```\n'
+  const checkpoint = { ...deliverySummary(state), reviewReceipts: state.reviewReceipts,
+    validation: state.validation, escalationCount: state.escalationCount }
+  return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
 
 export function checkProjectCompletion(repoRoot, state, payload, config) {

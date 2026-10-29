@@ -24,6 +24,8 @@ test('DONE and the generated checkpoint share the reconciled runtime', async () 
   const completion = { result: 'passed', head: 'head', base: 'base', mergeCommit: 'merge',
     runtime: { restoreRequired: false, vmState: 'Stopped', actualMemoryGiB: 6 }, deployment: { readyState: 'READY' } }
   const state = shipping()
+  state.validation = { focused: 'passed', full_check: 'passed', binding: 'fixture-binding.json' }
+  state.escalationCount = 1
   state.runtime = { restoreRequired: true, vmState: 'Running', actualMemoryGiB: 4 }
   const next = transitionDeliveryState(state, 'shipped', { mergeCommit: 'merge', pr: 'fixture', completion })
   const directory = await mkdtemp(join(tmpdir(), 'workflow-completion-'))
@@ -35,6 +37,9 @@ test('DONE and the generated checkpoint share the reconciled runtime', async () 
   assert.deepEqual(stored.runtime, completion.runtime)
   assert.deepEqual(checkpoint.runtime, stored.runtime)
   assert.equal(checkpoint.state, stored.state)
+  assert.deepEqual(checkpoint.reviewReceipts, stored.reviewReceipts)
+  assert.deepEqual(checkpoint.validation, stored.validation)
+  assert.equal(checkpoint.escalationCount, stored.escalationCount)
 })
 test('the project checker uses stdin and fails closed without returning stderr', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'workflow-checker-'))

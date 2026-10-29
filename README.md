@@ -285,6 +285,20 @@ The repository intentionally excludes environment files, credentials, caches,
 logs, sessions, runtime state, conflict payloads, and backups. Run the secret scan
 before release.
 
+## Version 0.4.0
+
+- Optional `commands.validationProof` binds and verifies immutable validation
+  receipts against the delivered commit.
+- Optional `commands.completionCheck` reconciles project evidence before `DONE`;
+  a failed check leaves the delivery in `SHIPPING`.
+- Generated checkpoints preserve review receipts, validation, and escalation
+  evidence; `delivery-state.mjs summary` provides a compact status view.
+- The shipper owns CI observation; domain reviews trace rules through code,
+  explanations, documentation, and regression tests.
+
+Both hooks default to `null`. Updating existing projects preserves their config;
+activating project-specific checks requires their own Node entry points.
+
 ## Versioning
 
 The current source version is `0.4.0`. Releases use SemVer tags such as `v0.4.0` and
