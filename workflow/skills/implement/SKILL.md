@@ -23,9 +23,13 @@ hardened and in the configured implementing state.
 4. Implement only the card.
 5. Run focused proof, card validation, then configured `commands.fullCheck`. An
    unavailable required check is a blocker, not a pass.
+   Align the intended index before the full gate; leave tested contents unchanged.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
 7. Persist objective validation and transition the checkpoint to `REVIEWING`.
+   When `commands.validationProof` is configured, use its `bind` entry point
+   after commit and persist the returned binding path with validation. Pass full
+   base/head SHAs; keep the raw receipt unchanged.
 
 Return the implementation handoff from the delivery contract and stop. Do not
 review, rework, push/merge a PR, or select another card.

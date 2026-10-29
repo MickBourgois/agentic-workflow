@@ -77,6 +77,10 @@ medium route. Pass only card, worktree, approved head, validation, and exact-hea
 receipts. Require `/ship-production-change`. Accept `DONE` only after merge on the
 configured base, tracker completion, and required deployment proof.
 
+While shipping runs, await its result using the observation ownership contract;
+the shipper owns the external watch. Use compact state summaries for routine
+updates and perform the independent terminal audit once.
+
 ## 6. Terminal response
 
 ```json

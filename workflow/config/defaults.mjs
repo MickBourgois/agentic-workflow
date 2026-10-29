@@ -28,6 +28,8 @@ export const WORKFLOW_DEFAULTS = Object.freeze({
   commands: {
     install: 'auto',
     fullCheck: 'auto',
+    completionCheck: null,
+    validationProof: null,
   },
   worktree: {
     root: '.delivery/worktrees',

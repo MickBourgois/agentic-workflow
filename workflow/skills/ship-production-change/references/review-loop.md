@@ -8,6 +8,9 @@ This gate begins only after adaptive independent review approves the exact head.
 - PR body: card link, summary, scope, validation, risk, receipt count, and
   deployment/migration notes.
 - Pending or failed required checks are not green.
+- Own the CI watch for this phase. Use event waits or the native required-check
+  watcher described in the delivery contract; return changes and terminal evidence
+  to the orchestrator without duplicate polling.
 - Any new commit invalidates every prior receipt and returns control to the
   orchestrator.
 - Classify every PR thread; actionable unresolved P0-P3 blocks merge.

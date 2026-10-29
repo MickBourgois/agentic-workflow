@@ -21,3 +21,13 @@ Configure only values detection cannot know: Linear team, nonstandard statuses o
 labels, environment files that a worktree may copy, and project-specific safety
 warnings. Environment file names may be configured; their contents are never
 copied into the workflow source, manifest, logs, or reports.
+
+Optional project Node entry points in `commands`:
+
+- `validationProof`: binds/verifies the project's immutable validation receipt
+  against an explicit base/head; agents persist and reuse its actual output path.
+- `completionCheck`: receives `{state,payload,config}` on stdin before `shipped`,
+  exits nonzero on missing/contradictory project evidence, or returns
+  `{result:"passed",head,base,mergeCommit,...}`. Its public reconciled fields
+  become the terminal state and generated checkpoint. Project evidence travels
+  through `event --payload-file <path>`, not shell interpolation.
