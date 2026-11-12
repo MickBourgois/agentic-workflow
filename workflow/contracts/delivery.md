@@ -98,7 +98,8 @@ status: implementation_complete
 commit: <sha>
 validation:
   focused: passed
-  full_check: passed
+  required_check: passed
+  profile: <full-or-project-profile>
 notes:
   migrations: none
   known_limitations: []
@@ -133,8 +134,10 @@ Critical reviewers run independently. The orchestrator unions duplicates by
 
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
 structured findings only. Output the new commit, findings addressed, focused
-validation, and unresolved blockers. Rework never runs the next review; the full
-gate and exact-head binding remain mandatory before approval and shipping.
+validation, and unresolved blockers. Rework never runs the next review; the
+required project gate and exact-head binding remain mandatory before approval
+and shipping. Full is the default; a reduced profile requires explicit project
+mode and the tested, fail-closed impact policy in the integration contract.
 
 ### Shipping
 
@@ -171,7 +174,7 @@ Prefer a connector's event wait. Where unavailable, GitHub CLI provides a bounde
 tool session with `gh pr checks <PR> --repo <OWNER/REPO> --required --watch
 --fail-fast --interval 30`. Record the head before watching and recheck head/base
 and CI before merge. Missing, skipped, unknown or empty required checks do not
-establish a passing full gate. Never rerun a failed CI solely to keep watching.
+establish a passing required gate. Never rerun a failed CI solely to keep watching.
 
 Read compact metadata projections from connectors: head/status/conclusion/URL,
 not full commit diffs or issue bodies for a status lookup. Use

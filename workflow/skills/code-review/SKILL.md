@@ -21,12 +21,14 @@ is unavailable, scope or impact is uncertain, or a sensitive contract changes.
 Always issue a new receipt for the current head.
 
 For an intermediate rework, inspect the recorded focused check commands and
-results for this head. For the initial implementation review, require full-gate proof and, when configured, verify its
+results for this head. For the initial implementation review, require proof of the project's required gate and, when configured, verify its
 binding with `commands.validationProof`. Only a documented intermediate rework may omit that
 binding; verify it whenever provided. Missing or failing required focused checks, a stale binding, or an unverified
 initial binding when configured blocks approval. Without `validationProof`,
-require auditable project evidence of the initial full gate. A full gate
-bound to the approved head remains mandatory before shipping.
+require auditable project evidence of the initial gate. The full gate is required
+unless `delivery.validationMode` is explicitly `project` and a tested project
+impact policy permits a reduced profile. Missing or ambiguous coverage requires
+the full gate. The required gate must be bound to the approved head before shipping.
 
 Review every file in the applicable diff on two axes:
 

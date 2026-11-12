@@ -45,6 +45,7 @@ precedence, is gitignored, and is suitable for machine-only command overrides.
     "warnings": []
   },
   "delivery": {
+    "validationMode": "full",
     "maxReworkCycles": 2,
     "maxEscalations": 1
   }
@@ -63,8 +64,13 @@ Routing models are workflow behavior, not project configuration. They remain in
 the versioned central defaults so the classification contract has one source of
 truth.
 
+`delivery.validationMode` defaults to `full`. Set it to `project` in the
+project configuration only after the project has a tested fail-closed impact
+policy, matching CI and evidence verification. Unknown or sensitive impact
+must use the full gate. Local configuration cannot enable project mode alone.
+
 `commands.validationProof` and `commands.completionCheck` optionally name
-project-owned Node entry points. The former binds/verifies immutable full-gate
+project-owned Node entry points. The former binds/verifies immutable required-gate
 receipts. The latter receives state, shipping evidence and resolved config on
 stdin; failure blocks `DONE`. See the project integration contract for the
 protocol. These defaults are null, so existing consumers retain their behavior.

@@ -52,6 +52,7 @@
       "type": "object",
       "additionalProperties": false,
       "properties": {
+        "validationMode": { "enum": ["full", "project"] },
         "maxReworkCycles": { "type": "integer", "minimum": 0 },
         "maxEscalations": { "type": "integer", "minimum": 0 }
       }
