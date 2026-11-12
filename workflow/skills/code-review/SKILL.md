@@ -20,15 +20,16 @@ For a bounded rework with a verified previous receipt on the same base, inspect
 is unavailable, scope or impact is uncertain, or a sensitive contract changes.
 Always issue a new receipt for the current head.
 
-For an intermediate rework, inspect the recorded focused check commands and
-results for this head. For the initial implementation review, require proof of the project's required gate and, when configured, verify its
-binding with `commands.validationProof`. Only a documented intermediate rework may omit that
-binding; verify it whenever provided. Missing or failing required focused checks, a stale binding, or an unverified
-initial binding when configured blocks approval. Without `validationProof`,
-require auditable project evidence of the initial gate. The full gate is required
-unless `delivery.validationMode` is explicitly `project` and a tested project
-impact policy permits a reduced profile. Missing or ambiguous coverage requires
-the full gate. The required gate must be bound to the approved head before shipping.
+For both initial and rework reviews, require recorded successful focused checks
+for this exact head. Inspect actual commands, results and their coverage of the
+change, acceptance criteria and project/card requirements. Missing, unavailable,
+failing or insufficient required checks block approval, including any build or
+early full gate explicitly mandated by stricter instructions. The workflow does
+not otherwise require `commands.fullCheck` or a gate binding before review.
+Never use a partial or stale gate receipt as evidence of successful validation.
+Return `scope: code_and_focused_checks`: this approves code and focused evidence,
+not the final gate or delivery. The orchestrator must obtain and verify the
+required gate on this exact base/head after all slots approve.
 
 Review every file in the applicable diff on two axes:
 

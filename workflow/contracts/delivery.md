@@ -13,10 +13,10 @@ Repository state, Git commits, tracker comments, and compact checkpoints are
 shared memory. Agent transcripts are not handoffs.
 
 ```text
-READY -> IMPLEMENTING -> REVIEWING -> APPROVED -> SHIPPING -> DONE
-                            |             ^
-                            v             |
-                         REWORKING --------+
+READY -> IMPLEMENTING -> REVIEWING -> VALIDATING -> APPROVED -> SHIPPING -> DONE
+                            |  ^       required gate
+                            v  |
+                         REWORKING
 ```
 
 Any non-terminal state may move to `NEEDS_HUMAN` or `FAILED`. The default limit
@@ -97,13 +97,22 @@ card: PROJ-123
 status: implementation_complete
 commit: <sha>
 validation:
+  head: <sha>
   focused: passed
-  required_check: passed
-  profile: <full-or-project-profile>
+  checks:
+    - command: <actual-required-focused-command>
+      exitCode: 0
 notes:
   migrations: none
   known_limitations: []
 ```
+
+Run and record sufficient focused tests and every project/card pre-commit or
+pre-review requirement, including an explicitly required build or early full
+gate. Missing or failing required checks block entry into REVIEWING. The workflow
+itself defers the required final gate until all independent reviews approve.
+The CLI validates the records; the phase and reviewer must inspect actual results
+and coverage. It cannot infer every project's required commands from a diff.
 
 ### Review
 
@@ -117,6 +126,7 @@ card: PROJ-123
 status: approved | findings
 reviewed_head: <sha>
 reviewer_slot: single | A | B
+scope: code_and_focused_checks
 findings:
   - id: RVW-001
     priority: P0 | P1 | P2 | P3
@@ -129,6 +139,53 @@ findings:
 
 Critical reviewers run independently. The orchestrator unions duplicates by
 `(file, line, requirement)` and sends conflicting opinions to a human.
+Before each dispatch, `delivery-state.mjs review-ready --card <CARD>` requires
+recorded passing focused checks for the current head, a clean live worktree and
+the frozen base as an ancestor. The reviewer assesses code and focused evidence;
+its approval does not assert that the final gate passed. Initial and rework
+reviews use the same rule, with stricter project/card instructions preserved.
+
+### Required gate and delivery approval
+
+`reviews_approved` takes all exact-head, scoped receipts and moves REVIEWING to
+VALIDATING. Missing slots, findings, stale heads or missing focused checks block
+that event. It preserves focused evidence separately as `focusedValidation`.
+Only then run the required project gate on the approved head and frozen base.
+Full is the default; project profiles retain the integration contract's explicit
+opt-in and tested fail-closed policy. Reuse an existing receipt only if it already
+meets that exact policy, pair and freshness requirements. Never rebind old or
+partial results to a new commit.
+
+`review_approved` now requires VALIDATING and a validation object:
+
+```yaml
+kind: required_gate
+result: passed
+base: <frozen-base-sha>
+head: <approved-sha>
+profile: full # or a profile permitted by explicit project mode
+reason: <policy-selection-reason>
+checks:
+  - command: <actual-required-gate-command>
+    exitCode: 0
+receipt: <auditable-receipt-path>
+binding: <binding-path-if-validationProof-is-configured>
+```
+
+The event verifies the project's binding when configured before entering
+APPROVED (delivery approval). Gate failure leaves VALIDATING, with no shipping
+authorization. `start_shipping` checks the same evidence again without rerunning
+the gate; with a verifier it also compares the saved binding/receipt hashes.
+Receipt expiry and project-specific freshness/coverage are enforced by the
+project verifier or, without one, the project's audited process. The CLI checks
+records and exact SHAs but does not execute tests or independently certify those
+records without a verifier. No generic time-to-live is imposed.
+
+Every new commit invalidates code approvals and gate evidence; a changed base
+invalidates the pair too. Unexpected Git changes require reconciliation and fresh
+review, never silent edits to frozen SHAs. A gate-triggered correction follows
+the existing bounded rework process after confirmed findings; unresolved scope
+or state mismatches require a human. Keep approvals and gate status distinct.
 
 ### Rework
 
@@ -157,7 +214,7 @@ Update an existing marked comment by ID. Never create duplicates. Mirror the
 checkpoint at `.delivery/state/<CARD>.json`; Git and live tracker/PR state outrank
 a stale local file. Previous review receipts stay in local state only, never in
 the shared checkpoint; active review and rework checkpoints omit all review
-receipts. Before dispatch or resume, publish and verify the sanitized checkpoint.
+receipts, including in VALIDATING. Before dispatch or resume, publish and verify the sanitized checkpoint.
 If local context is lost, use a full fresh review.
 
 ## Resume
@@ -182,13 +239,45 @@ not full commit diffs or issue bodies for a status lookup. Use
 logs and history stay in files and are read only to investigate a specific issue.
 
 1. Fetch the full card, relations, routing comment, and checkpoint.
-2. Inspect live branches, worktrees, commits, PR, CI, and merge state. For a
-   pre-0.5 `APPROVED` or `SHIPPING` state with a configured verifier, refresh
-   proof via `validation_refreshed` while its worktree still exists; otherwise
-   stop rather than fabricate missing evidence.
+2. Inspect live branches, worktrees, commits, PR, CI, and merge state. Follow the
+   legacy compatibility rules below before changing an older state.
 3. Reconcile to the last state with durable evidence. Approval names the current
    head; `DONE` requires a confirmed merge.
 4. Resume only the next phase in a fresh context.
 
 Backlog traversal is an outer runner. It starts a new top-level Codex process per
 card and never uses `codex exec resume`.
+
+### Compatibility with deliveries started before 0.7.0
+
+New local states use format version 2. The tracker marker stays
+`delivery-checkpoint:v1` so comment ownership is unchanged; its JSON now includes
+the local state version. Installation/update never migrates `.delivery`, changes
+tracker comments, or rewrites receipts. Versions 1 and 2 can be read; unknown
+versions cannot transition. Do not change a version field to bypass checks.
+
+- READY/IMPLEMENTING: continue implementation and record real focused checks;
+  completion writes format 2.
+- REVIEWING: run `review-ready`. A legacy `full_check: passed` flag alone is
+  insufficient. Recover actual commands, successful results and their tested head
+  from durable evidence, with human reconciliation if records are incomplete.
+  Never invent focused records from a green summary. Obtain fresh scoped reviews
+  and use `reviews_approved`; old unscoped receipts cannot enter VALIDATING.
+- REWORKING: keep confirmed findings, slot-specific prior receipts, cycle and
+  escalation counts. A real corrected commit with focused evidence continues in
+  format 2; missing local context requires full-diff reviews, not incremental ones.
+- VALIDATING: resume from local exact-head scoped approvals. The sanitized shared
+  checkpoint cannot reconstruct them; missing local receipts requires a human
+  and fresh reviews, never synthetic approvals.
+- APPROVED/SHIPPING from format 1: keep the existing exact-head slots and approval
+  scope as recorded. They are not retrospectively labeled as focused reviews.
+  Before shipping/cleanup, recover and verify the real required-gate receipt and
+  record all gate fields above via `validation_refreshed` (same base/head,
+  `validationProof` verification when configured). Format 1 and original receipts
+  remain intact. Reuse valid proof rather than rerunning; expired proof requires
+  a real refresh. Missing approvals, a lost worktree, a changed pair or unavailable
+  proof requires a human; never recreate an old successful run. Already-merged
+  deliveries with a removed worktree need project completion/archive reconciliation,
+  not another merge or a fabricated local gate.
+- DONE/NEEDS_HUMAN/FAILED: preserve terminal state. Audit external facts separately;
+  a checkpoint or green PR alone proves neither merge nor deployment.

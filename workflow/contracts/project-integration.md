@@ -32,7 +32,10 @@ legacy command key is retained for compatibility.
 Optional project Node entry points in `commands`:
 
 - `validationProof`: binds/verifies the project's immutable validation receipt
-  against an explicit base/head. Before `review_approved`, the state CLI invokes
+  against an explicit base/head. It is not required for initial or rework code
+  reviews. After all `reviews_approved` receipts move the delivery to VALIDATING,
+  the orchestrator runs the required gate and binds its immutable receipt.
+  Before `review_approved`, the state CLI invokes
   `node <script> verify --card <CARD> --base <SHA> --head <SHA>` in the card
   worktree, adding `--binding <path>` when supplied in the event or state; it must emit JSON `{result,card,head,binding}`. The binding JSON must
   identify `result`, `card`, `base`, `head`, `receipt` and `receiptSha256`; both
@@ -40,8 +43,22 @@ Optional project Node entry points in `commands`:
   worktree at the expected head, with base an ancestor; hidden index flags such
   as assume-unchanged and skip-worktree are refused. Failure blocks approval. The state
   records SHA-256 hashes of binding and receipt for the completion check.
+  The event also records `kind: required_gate`, passing result, base/head,
+  profile/reason, executed checks and receipt (see delivery contract). Verifier
+  output supplies verified paths/hashes; it does not replace those gate records.
+  The project verifier must reject failed, expired or policy-inadequate receipts,
+  including reduced profiles not permitted by its tested policy. At
+  `start_shipping` it verifies again and the CLI refuses changed hashes; this
+  does not rerun the gate. `validation_refreshed` records a deliberate real refresh.
 - `completionCheck`: receives `{state,payload,config}` on stdin before `shipped`,
   exits nonzero on missing/contradictory project evidence, or returns
   `{result:"passed",head,base,mergeCommit,...}`. Its public reconciled fields
   become the terminal state and generated checkpoint. Project evidence travels
   through `event --payload-file <path>`, not shell interpolation.
+
+Without `validationProof`, the same final gate record is mandatory, but its
+authenticity, freshness and policy coverage are enforced by the project process,
+not independently verified by the CLI. Missing `commands.fullCheck` is not a pass:
+the phase must identify and execute the project's required validation or stop.
+Project/card instructions may require additional checks or a full gate before
+commit/review; this workflow never relaxes those explicit requirements.

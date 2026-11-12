@@ -19,7 +19,8 @@ security decisions return `needs_human` without edits.
 2. Reproduce or verify each finding.
 3. Make the smallest correction for confirmed findings only.
 4. Add or adjust proof for each correction.
-5. Run affected proof and invalidated card checks. Record commands and results;
+5. Run affected proof and invalidated card checks, including a build or early
+   full gate when project/card instructions require it. Record commands and results;
    unavailable or failing required focused checks block review. Do not call this
    a full gate or reuse a stale binding.
 6. Create one card/finding-referencing commit, update the checkpoint to

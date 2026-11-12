@@ -35,12 +35,12 @@ function implemented(state, commit = 'abc123') {
   return transitionDeliveryState(
     transitionDeliveryState(state, 'start_implementation'),
     'implementation_complete',
-    { commit, validation: { full_check: 'passed' } },
+    { commit, validation: { head: commit, focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } },
   )
 }
 
 function receipt(head, status = 'approved', slot = 'single') {
-  return { reviewed_head: head, status, reviewer_slot: slot }
+  return { reviewed_head: head, status, reviewer_slot: slot, scope: 'code_and_focused_checks' }
 }
 
 test('simple routes to Luna low with one Luna high reviewer', () => {
@@ -79,16 +79,16 @@ test('critical requires two independent exact-head review slots', () => {
     { model: 'gpt-6-sol', reasoning: 'high' },
   ])
   state = implemented(state, 'critical-head')
-  assert.throws(() => transitionDeliveryState(state, 'review_approved', {
+  assert.throws(() => transitionDeliveryState(state, 'reviews_approved', {
     receipts: [receipt('critical-head', 'approved', 'A')],
   }), /expected 2 review receipt/)
-  state = transitionDeliveryState(state, 'review_approved', {
+  state = transitionDeliveryState(state, 'reviews_approved', {
     receipts: [
       receipt('critical-head', 'approved', 'A'),
       receipt('critical-head', 'approved', 'B'),
     ],
   })
-  assert.equal(state.state, 'APPROVED')
+  assert.equal(state.state, 'VALIDATING')
 })
 
 test('rework invalidates receipts and stops after the configured cycle limit', () => {
@@ -106,7 +106,7 @@ test('rework invalidates receipts and stops after the configured cycle limit', (
   assert.deepEqual(state.previousReview.receipts, previousReceipts)
   assert.deepEqual(state.previousReview.findings, [{ id: 'RVW-001' }])
   assert.doesNotMatch(deliveryCheckpoint(state), /RVW-001/)
-  assert.throws(() => transitionDeliveryState(state, 'review_approved', { receipts: previousReceipts }), /head/)
+  assert.throws(() => transitionDeliveryState(state, 'reviews_approved', { receipts: previousReceipts }), /head/)
   assert.deepEqual(state.reviewReceipts, [])
   state = transitionDeliveryState(state, 'review_findings', {
     receipts: [receipt('head1', 'findings')], findings: [{ id: 'RVW-002' }],
@@ -125,7 +125,7 @@ test('critical rework keeps slot receipts out of the shared checkpoint', () => {
   state = transitionDeliveryState(state, 'rework_complete', { commit: 'new', validation: { head: 'new', focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } })
   assert.deepEqual(state.previousReview.receipts, receipts)
   assert.doesNotMatch(deliveryCheckpoint(state), /PRIVATE-[AB]/)
-  assert.throws(() => transitionDeliveryState(state, 'review_approved', { receipts }), /head/)
+  assert.throws(() => transitionDeliveryState(state, 'reviews_approved', { receipts }), /head/)
 })
 
 test('a repeated blocker escalates once and then becomes human work', () => {

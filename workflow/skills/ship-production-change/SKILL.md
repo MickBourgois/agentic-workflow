@@ -17,21 +17,27 @@ creates substitute evidence.
 
 ## Final gate
 
-On resume of a pre-0.5 approval or shipping state with `validationProof`
-configured, verify the existing full binding before deleting the worktree and
-record it using `delivery-state.mjs event --event validation_refreshed`. If the
-worktree or proof is unavailable, stop; do not invent evidence.
+For an older approval or shipping state, follow the legacy resume procedure in
+the delivery contract. Preserve existing receipts; refresh validation only from
+real exact-base/head evidence using `validation_refreshed`. Missing worktree,
+approvals or unrecoverable proof requires human reconciliation.
 
 1. Require a clean worktree, card-only diff, matching head, and all routed
    approvals.
-2. Run configured `commands.fullCheck` unless fresh auditable evidence proves this exact
-   head. Set the frozen base for the gate; if no valid binding exists, bind the
+2. Reuse the orchestrator's fresh auditable gate for this exact base/head; do not
+   rerun it solely because shipping uses a fresh context. `start_shipping`
+   rechecks live Git and, when configured, invokes `validationProof` again and
+   compares the saved binding/receipt hashes. Changed or expired evidence blocks.
+   If project policy requires a refresh, run the gate again without changing code
+   and record `validation_refreshed` before shipping. Set the frozen base; bind the
    successful immutable required-gate receipt to the approved head with
    `commands.validationProof` when configured, then verify it. Otherwise record
    auditable project evidence for the approved head. Never accept focused proof or a
    binding from an earlier head. Default `delivery.validationMode: full` requires
    the full gate. Explicit `project` mode permits only a reduced profile selected
    by the project's tested fail-closed impact policy; otherwise require full.
+   Record the required-gate fields from the delivery contract. Focused evidence
+   never substitutes for the final gate, even without `validationProof`.
    Run remaining card-specific release, migration,
    and security gates; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.

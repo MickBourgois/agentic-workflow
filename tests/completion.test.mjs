@@ -7,11 +7,16 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createDeliveryState, transitionDeliveryState, writeDeliveryState, checkProjectCompletion, checkProjectValidation, deliverySummary } from '../workflow/orchestrator/delivery-state.mjs'
 
+function gate() {
+  return { kind: 'required_gate', result: 'passed', head: 'head', base: 'base', profile: 'full', reason: 'default', checks: [{ command: 'check', exitCode: 0 }], receipt: 'receipt.json' }
+}
+
 function shipping() {
   let state = createDeliveryState({ card: 'PROJ-301', complexity: 'standard', baseSha: 'base', completionCheck: 'completion.mjs' })
   state = transitionDeliveryState(state, 'start_implementation')
-  state = transitionDeliveryState(state, 'implementation_complete', { commit: 'head' })
-  state = transitionDeliveryState(state, 'review_approved', { receipts: [{ reviewed_head: 'head', status: 'approved', reviewer_slot: 'single' }] })
+  state = transitionDeliveryState(state, 'implementation_complete', { commit: 'head', validation: { head: 'head', focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } })
+  state = transitionDeliveryState(state, 'reviews_approved', { receipts: [{ reviewed_head: 'head', status: 'approved', reviewer_slot: 'single', scope: 'code_and_focused_checks' }] })
+  state = transitionDeliveryState(state, 'review_approved', { validation: gate() })
   return transitionDeliveryState(state, 'start_shipping')
 }
 test('a configured project completion check is mandatory and bound to head/base/merge', () => {
@@ -26,7 +31,7 @@ test('DONE and the generated checkpoint share the reconciled runtime', async () 
   const completion = { result: 'passed', head: 'head', base: 'base', mergeCommit: 'merge',
     runtime: { restoreRequired: false, vmState: 'Stopped', actualMemoryGiB: 6 }, deployment: { readyState: 'READY' } }
   const state = shipping()
-  state.validation = { focused: 'passed', full_check: 'passed', binding: 'fixture-binding.json' }
+  state.validation = { ...gate(), binding: 'fixture-binding.json' }
   state.escalationCount = 1
   state.runtime = { restoreRequired: true, vmState: 'Running', actualMemoryGiB: 4 }
   const next = transitionDeliveryState(state, 'shipped', { mergeCommit: 'merge', pr: 'fixture', completion })
@@ -96,8 +101,8 @@ test('approval verifier fails closed on dirty verifier, stale head or tampered e
 
 test('legacy shipping state accepts only a verified exact-head validation refresh', () => {
   const state = shipping()
-  assert.throws(() => transitionDeliveryState(state, 'validation_refreshed', { validation: { result: 'passed', head: 'old', base: 'base' } }), /verified validation/)
-  const next = transitionDeliveryState(state, 'validation_refreshed', { validation: { result: 'passed', head: 'head', base: 'base' } })
+  assert.throws(() => transitionDeliveryState(state, 'validation_refreshed', { validation: { ...gate(), head: 'old' } }), /exact base\/head/)
+  const next = transitionDeliveryState(state, 'validation_refreshed', { validation: gate() })
   assert.equal(next.state, 'SHIPPING')
   assert.equal(next.validation.head, 'head')
 })
