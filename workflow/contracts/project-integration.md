@@ -27,7 +27,7 @@ Optional project Node entry points in `commands`:
 - `validationProof`: binds/verifies the project's immutable validation receipt
   against an explicit base/head. Before `review_approved`, the state CLI invokes
   `node <script> verify --card <CARD> --base <SHA> --head <SHA>` in the card
-  worktree; it must emit JSON `{result,card,head,binding}`. The binding JSON must
+  worktree, adding `--binding <path>` when supplied in the event or state; it must emit JSON `{result,card,head,binding}`. The binding JSON must
   identify `result`, `card`, `base`, `head`, `receipt` and `receiptSha256`; both
   paths must resolve inside the worktree. The verifier must be tracked in a clean
   worktree at the expected head, with base an ancestor; hidden index flags such

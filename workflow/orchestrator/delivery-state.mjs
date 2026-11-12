@@ -292,7 +292,7 @@ export function deliveryCheckpoint(state) {
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
 
-export function checkProjectValidation(state, config) {
+export function checkProjectValidation(state, config, requestedBinding = state.validation?.binding) {
   try {
     assert(typeof state.worktree === 'string' && typeof config.commands.validationProof === 'string', 'missing validation verifier')
     const cwd = realpathSync(state.worktree)
@@ -304,7 +304,9 @@ export function checkProjectValidation(state, config) {
     const script = realpathSync(resolve(cwd, config.commands.validationProof)), scriptPath = relative(cwd, script)
     assert(scriptPath && !scriptPath.startsWith('..') && !isAbsolute(scriptPath), 'invalid validation verifier path')
     git(['ls-files', '--error-unmatch', '--', scriptPath])
-    const output = execFileSync(process.execPath, [script, 'verify', '--card', state.card, '--base', state.baseSha, '--head', state.currentHead], {
+    const args = [script, 'verify', '--card', state.card, '--base', state.baseSha, '--head', state.currentHead]
+    if (requestedBinding) args.push('--binding', requestedBinding)
+    const output = execFileSync(process.execPath, args, {
       cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024,
     })
     const verdict = JSON.parse(output)
@@ -392,7 +394,7 @@ async function main() {
         : flags.payload ? JSON.parse(flags.payload) : {}
     } catch { throw new Error('INVALID_DELIVERY_PAYLOAD') }
     if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event) && config.commands.validationProof) {
-      payload.validation = checkProjectValidation(current, config)
+      payload.validation = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
     }
     if (flags.event === 'shipped' && config.commands.completionCheck) {
       current.policy.completionCheck = config.commands.completionCheck

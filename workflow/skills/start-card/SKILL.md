@@ -69,7 +69,8 @@ transcripts, rationale, conclusions, or another review.
 
 If every required receipt approves the current head, run the configured full
 check on that exact head unless fresh auditable full evidence already exists.
-Bind the receipt using `commands.validationProof` when configured. The
+Bind the receipt using `commands.validationProof` when configured and pass its
+returned binding path in `review_approved` payload `validation.binding`. The
 `review_approved` event verifies that proof before transitioning to `APPROVED`;
 any failure blocks shipping. Preserve the verified binding and receipt for the
 final archive.
