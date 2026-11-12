@@ -218,6 +218,14 @@ Manual phase commands remain available when deliberately bypassing orchestration
 
 Each manual phase still runs in a new task/context and stops at its contract.
 
+Rework records successful focused checks for the new commit before review. A
+bounded correction may receive an incremental review using only that slot’s own
+previous receipt from local state; missing local context, sensitive or uncertain
+impact requires the complete diff. A
+full check remains mandatory on the final head before approval and shipping.
+When `commands.validationProof` is not configured, enforcing and recording that
+proof remains the responsibility of the project workflow rather than the CLI.
+
 ## Agents
 
 - **Orchestrator (`/start-card`)** reconciles durable state and dispatches phases;
@@ -291,7 +299,7 @@ before release.
   receipts against the delivered commit.
 - Optional `commands.completionCheck` reconciles project evidence before `DONE`;
   a failed check leaves the delivery in `SHIPPING`.
-- Generated checkpoints preserve review receipts, validation, and escalation
+- Generated checkpoints preserve validation and escalation
   evidence; `delivery-state.mjs summary` provides a compact status view.
 - The shipper owns CI observation; domain reviews trace rules through code,
   explanations, documentation, and regression tests.
@@ -301,7 +309,7 @@ activating project-specific checks requires their own Node entry points.
 
 ## Versioning
 
-The current source version is `0.4.0`. Releases use SemVer tags such as `v0.4.0` and
+The current source version is `0.5.0`. Releases use SemVer tags such as `v0.5.0` and
 `v1.0.0`.
 
 ## Current limitations

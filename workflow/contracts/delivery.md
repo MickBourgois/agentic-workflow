@@ -107,7 +107,9 @@ notes:
 ### Review
 
 Input: card ID, repository/worktree, base SHA, head SHA, reviewer slot. Never pass
-implementation transcripts, rationale, conclusions, or another review.
+implementation transcripts, rationale, conclusions, or another slot's review.
+For a bounded rework, the same slot may receive its own prior receipt and head;
+its new review and receipt must cover the current head as specified by the skill.
 
 ```yaml
 card: PROJ-123
@@ -130,13 +132,14 @@ Critical reviewers run independently. The orchestrator unions duplicates by
 ### Rework
 
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
-structured findings only. Output the new commit, findings addressed, validation,
-and unresolved blockers. Rework never runs the next review.
+structured findings only. Output the new commit, findings addressed, focused
+validation, and unresolved blockers. Rework never runs the next review; the full
+gate and exact-head binding remain mandatory before approval and shipping.
 
 ### Shipping
 
-Input: card ID, worktree, approved head, validation, and required review receipts
-for that exact head. Shipping may push, open/update the PR, wait for CI, merge when
+Input: card ID, worktree, frozen base SHA, approved head, validation, and required
+review receipts for that exact head. Shipping may push, open/update the PR, wait for CI, merge when
 repository rules allow it, verify deployment, update the tracker, and clean the
 worktree. It never edits application code or manufactures review evidence.
 
@@ -149,7 +152,10 @@ SHAs, cycles, receipts, PR, validation, escalation count, and next action.
 
 Update an existing marked comment by ID. Never create duplicates. Mirror the
 checkpoint at `.delivery/state/<CARD>.json`; Git and live tracker/PR state outrank
-a stale local file.
+a stale local file. Previous review receipts stay in local state only, never in
+the shared checkpoint; active review and rework checkpoints omit all review
+receipts. Before dispatch or resume, publish and verify the sanitized checkpoint.
+If local context is lost, use a full fresh review.
 
 ## Resume
 
@@ -173,7 +179,10 @@ not full commit diffs or issue bodies for a status lookup. Use
 logs and history stay in files and are read only to investigate a specific issue.
 
 1. Fetch the full card, relations, routing comment, and checkpoint.
-2. Inspect live branches, worktrees, commits, PR, CI, and merge state.
+2. Inspect live branches, worktrees, commits, PR, CI, and merge state. For a
+   pre-0.5 `APPROVED` or `SHIPPING` state with a configured verifier, refresh
+   proof via `validation_refreshed` while its worktree still exists; otherwise
+   stop rather than fabricate missing evidence.
 3. Reconcile to the last state with durable evidence. Approval names the current
    head; `DONE` requires a confirmed merge.
 4. Resume only the next phase in a fresh context.

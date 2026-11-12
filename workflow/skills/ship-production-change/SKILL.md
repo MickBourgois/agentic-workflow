@@ -17,12 +17,20 @@ creates substitute evidence.
 
 ## Final gate
 
+On resume of a pre-0.5 approval or shipping state with `validationProof`
+configured, verify the existing full binding before deleting the worktree and
+record it using `delivery-state.mjs event --event validation_refreshed`. If the
+worktree or proof is unavailable, stop; do not invent evidence.
+
 1. Require a clean worktree, card-only diff, matching head, and all routed
    approvals.
 2. Run configured full check unless fresh auditable evidence proves this exact
-   head. Run remaining card-specific release/migration/security gates.
-   Verify the recorded binding with configured `commands.validationProof` when
-   present; preserve raw receipts.
+   head. Set the frozen base for the gate; if no valid binding exists, bind the
+   successful immutable full-gate receipt to the approved head with
+   `commands.validationProof` when configured, then verify it. Otherwise record
+   auditable project evidence for the approved head. Never accept focused proof or a
+   binding from an earlier head. Run remaining card-specific release, migration,
+   and security gates; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.
 4. Pull/rebase against the current configured remote/base before push when needed.
    A changed head invalidates approvals and returns to the orchestrator.
@@ -37,6 +45,10 @@ and mergeability. Confirm merge on the configured base and required deployment/
 safe-smoke proof before setting the card to done.
 
 ## Cleanup
+
+When validation proof is configured, archive the verified binding and its raw
+receipt with their recorded hashes before removing the worktree; pass their
+archive paths to the project completion checker.
 
 After confirmed merge only, remove this card's clean inactive worktree with
 `git worktree remove`, prune metadata, and stop task-owned processes. Preserve

@@ -55,8 +55,11 @@ fresh-context retry. A further match becomes `NEEDS_HUMAN`.
 
 ## 4. Dispatch independent review
 
-Transition to `REVIEWING`. Each fresh reviewer receives only card ID, path, base
-SHA, current head SHA, and reviewer slot.
+Transition to `REVIEWING`. Before dispatch or resume, publish and reread the
+checkpoint with review receipts removed while in `REVIEWING` or `REWORKING`;
+if it cannot be sanitized, stop. Each fresh reviewer receives card ID, path, base
+SHA, current head SHA, and reviewer slot; a bounded rework may also supply the
+slot-specific prior receipt and its reviewed head.
 
 - simple, standard, complex: one reviewer;
 - critical: reviewers A and B concurrently on their distinct routed models.
@@ -64,17 +67,33 @@ SHA, current head SHA, and reviewer slot.
 Require `/code-review` and exact-head receipts. Never pass implementation
 transcripts, rationale, conclusions, or another review.
 
-If every required receipt approves the current head, transition to `APPROVED`.
-Otherwise deduplicate findings by `(file, line, requirement)`. Conflicting reviews
-need a human. Within the configured rework limit, move the card to rework, spawn a
-fresh `reworker` with confirmed findings only, require a new commit, then run a
-completely fresh review on the new head. Any commit invalidates prior approvals.
+If every required receipt approves the current head, run the configured full
+check on that exact head unless fresh auditable full evidence already exists.
+Bind the receipt using `commands.validationProof` when configured and pass its
+returned binding path in `review_approved` payload `validation.binding`. The
+`review_approved` event verifies that proof before transitioning to `APPROVED`;
+any failure blocks shipping. Preserve the verified binding and receipt for the
+final archive.
+Otherwise deduplicate findings by `(file, line, requirement)`; confirm each
+finding with an observable scenario or explicit requirement and collect all
+confirmed blocking findings before rework. Record nonblocking suggestions without
+forcing a cycle. Conflicting reviews need a human. Within the configured rework limit, move the card to rework, spawn a
+fresh `reworker` with confirmed findings only and require a new commit. Review
+the new head independently in each required slot. After a bounded correction,
+use the local state `previousReview` to pass each slot only its own previous
+receipt and old/new SHAs: inspect the correction, its callers and tests, and
+that slot’s previous findings; issue a new receipt
+for the new head. If impact, scope, base, dependencies, or risk are uncertain or
+a sensitive contract changes, review the complete card diff again. If the local
+context is unavailable on resume, review the complete card diff again. Any commit
+invalidates prior approvals; previous receipts are context, never approval of the
+new head.
 
 ## 5. Dispatch shipping
 
 After `APPROVED`, spawn `shipper` with no inherited turns on the fixed Sol 6.1 /
-medium route. Pass only card, worktree, approved head, validation, and exact-head
-receipts. Require `/ship-production-change`. Accept `DONE` only after merge on the
+medium route. Pass only card, worktree, frozen base SHA, approved head,
+validation, and exact-head receipts. Require `/ship-production-change`. Accept `DONE` only after merge on the
 configured base, tracker completion, and required deployment proof.
 
 While shipping runs, await its result using the observation ownership contract;
