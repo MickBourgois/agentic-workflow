@@ -64,6 +64,8 @@ explicit card
                        |                 |
                        +<--- fresh review on new head
                               |
+                        required gate on approved base/head
+                              |
                         fresh shipper
                               |
                       PR -> CI -> merge
@@ -218,15 +220,20 @@ Manual phase commands remain available when deliberately bypassing orchestration
 
 Each manual phase still runs in a new task/context and stops at its contract.
 
-Rework records successful focused checks for the new commit before review. A
-bounded correction may receive an incremental review using only that slot’s own
+Implementation and rework record successful focused checks for the new commit
+before review, including any build or early gate mandated by project/card
+instructions. A bounded correction may receive an incremental review using only that slot’s own
 previous receipt from local state; missing local context, sensitive or uncertain
-impact requires the complete diff. A full check remains the default on the final
-head before approval and shipping. A project can explicitly opt into a tested,
+impact requires the complete diff. Reviews explicitly approve code and focused
+checks. Once all slots approve,
+`reviews_approved` enters `VALIDATING`; the required gate runs on that exact
+base/head before `review_approved` grants delivery approval. A full check remains
+the default final gate before shipping. A project can explicitly opt into a tested,
 fail-closed impact policy to select a reduced required gate; uncertainty and
 sensitive changes still require the full gate. See the project integration contract.
-When `commands.validationProof` is not configured, enforcing and recording that
-proof remains the responsibility of the project workflow rather than the CLI.
+When `commands.validationProof` is not configured, verifying the proof's
+authenticity and freshness remains the responsibility of the project workflow;
+the CLI still requires an exact-pair, passing required-gate record.
 
 ## Agents
 
@@ -309,9 +316,22 @@ before release.
 Both hooks default to `null`. Updating existing projects preserves their config;
 activating project-specific checks requires their own Node entry points.
 
+## Version 0.7.0
+
+Focused checks → commit → independent code reviews → bounded corrections/reviews
+→ required gate on the approved base/head → delivery approval → shipping.
+Shipping reuses fresh proof and re-verifies it without rerunning the gate.
+Classification, critical dual reviews, project validation profiles and protected
+shipping rules are unchanged.
+
+Local state format 2 adds VALIDATING; the terminal runner schema and marked
+tracker comment ownership are unchanged. Existing format 1 deliveries are not
+automatically rewritten. See the [legacy resume rules](workflow/contracts/delivery.md#compatibility-with-deliveries-started-before-070)
+and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints.
+
 ## Versioning
 
-The current source version is `0.6.0`. Releases use SemVer tags such as `v0.6.0` and
+The current source version is `0.7.0`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

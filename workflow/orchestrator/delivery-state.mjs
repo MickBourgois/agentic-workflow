@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
 import { assertCard, loadConfig } from './config.mjs'
 
-export const DELIVERY_STATE_VERSION = 1
+export const DELIVERY_STATE_VERSION = 2
 export const TERMINAL_STATES = new Set(['DONE', 'NEEDS_HUMAN', 'FAILED'])
 
 function copy(value) {
@@ -56,6 +56,7 @@ export function createDeliveryState({
   maxReworkCycles = WORKFLOW_DEFAULTS.delivery.maxReworkCycles,
   maxEscalations = WORKFLOW_DEFAULTS.delivery.maxEscalations,
   completionCheck = null,
+  validationMode = WORKFLOW_DEFAULTS.delivery.validationMode,
 }) {
   assertCard(card, cardPattern)
   const now = new Date().toISOString()
@@ -68,7 +69,7 @@ export function createDeliveryState({
     dimensions,
     highEffort: isHighEffortComplex({ score, highEffort, dimensions }),
     route: routeFor(complexity, { score, highEffort, dimensions }),
-    policy: { maxReworkCycles, maxEscalations, completionCheck },
+    policy: { maxReworkCycles, maxEscalations, completionCheck, validationMode },
     baseSha,
     currentHead: null,
     branch,
@@ -93,18 +94,42 @@ function requiredReviewSlots(state) {
   return state.route.reviewers.length === 2 ? ['A', 'B'] : ['single']
 }
 
-function validateReviewReceipts(state, receipts) {
+function validateReviewReceipts(state, receipts, legacy = false) {
   assert(Array.isArray(receipts), 'review receipts must be an array')
   assert(receipts.length === state.route.reviewers.length,
     `expected ${state.route.reviewers.length} review receipt(s), got ${receipts.length}`)
   for (const receipt of receipts) {
     assert(receipt.reviewed_head === state.currentHead, 'review receipt head does not match current head')
     assert(['approved', 'findings'].includes(receipt.status), 'invalid review receipt status')
+    assert(legacy || receipt.scope === 'code_and_focused_checks', 'review scope must be code_and_focused_checks')
   }
   const actual = receipts.map((receipt) => receipt.reviewer_slot).sort()
   const expected = requiredReviewSlots(state).sort()
   assert(JSON.stringify(actual) === JSON.stringify(expected),
     `expected review slot(s) ${expected.join(', ')}, got ${actual.join(', ')}`)
+}
+
+function validateFocused(validation, head) {
+  assert(validation?.head === head, 'focused validation head does not match commit')
+  assert(validation.focused === 'passed', 'review requires passing focused validation')
+  validateChecks(validation.checks)
+}
+
+function validateChecks(checks) {
+  assert(Array.isArray(checks) && checks.length > 0 && checks.every((check) =>
+    typeof check.command === 'string' && check.command.trim() && check.exitCode === 0),
+  'successful recorded focused or gate checks required')
+}
+
+function validateGate(state, validation) {
+  assert(validation?.kind === 'required_gate' && validation.result === 'passed'
+    && validation.head === state.currentHead && validation.base === state.baseSha,
+  'passing required gate for exact base/head required')
+  assert(typeof validation.profile === 'string' && validation.profile.trim()
+    && typeof validation.reason === 'string' && validation.reason.trim(), 'gate profile and reason required')
+  assert(state.policy?.validationMode === 'project' || validation.profile === 'full', 'full gate required')
+  validateChecks(validation.checks)
+  assert(typeof validation.receipt === 'string' && validation.receipt.trim(), 'auditable gate receipt required')
 }
 
 function nextActionForState(state) {
@@ -113,12 +138,14 @@ function nextActionForState(state) {
     IMPLEMENTING: 'wait_for_implementation',
     REVIEWING: 'dispatch_independent_review',
     REWORKING: 'dispatch_rework',
+    VALIDATING: 'run_required_gate',
     APPROVED: 'dispatch_shipping',
     SHIPPING: 'wait_for_shipping',
   }[state] ?? 'stop'
 }
 
 export function transitionDeliveryState(current, event, payload = {}) {
+  assert([1, DELIVERY_STATE_VERSION].includes(current.version), 'unsupported delivery state version; needs human reconciliation')
   assert(!TERMINAL_STATES.has(current.state), `terminal state ${current.state} cannot transition`)
   const state = copy(current)
   const from = state.state
@@ -133,21 +160,35 @@ export function transitionDeliveryState(current, event, payload = {}) {
     case 'implementation_complete':
       requireState(state, 'IMPLEMENTING', event)
       assert(payload.commit, 'implementation_complete requires commit')
+      validateFocused(payload.validation, payload.commit)
+      state.version = DELIVERY_STATE_VERSION
       state.currentHead = payload.commit
       state.validation = payload.validation ?? null
+      delete state.focusedValidation
       state.state = 'REVIEWING'
       break
-    case 'review_approved':
+    case 'reviews_approved':
       requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
+      validateFocused(state.validation, state.currentHead)
       assert(payload.receipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
       state.reviewReceipts = payload.receipts
-      state.validation = payload.validation ?? state.validation ?? null
+      state.focusedValidation = state.validation
+      state.version = DELIVERY_STATE_VERSION
+      state.state = 'VALIDATING'
+      break
+    case 'review_approved':
+      requireState(state, 'VALIDATING', event)
+      validateReviewReceipts(state, state.reviewReceipts)
+      assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      validateGate(state, payload.validation)
+      state.validation = payload.validation
       state.state = 'APPROVED'
       break
     case 'review_findings':
       requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
+      validateFocused(state.validation, state.currentHead)
       assert(payload.receipts.some((receipt) => receipt.status === 'findings'), 'findings receipt required')
       assert(Array.isArray(payload.findings) && payload.findings.length > 0, 'actionable findings required')
       state.reviewReceipts = payload.receipts
@@ -163,13 +204,13 @@ export function transitionDeliveryState(current, event, payload = {}) {
       requireState(state, 'REWORKING', event)
       assert(payload.commit, 'rework_complete requires commit')
       assert(payload.commit !== state.currentHead, 'rework must produce a new commit')
-      assert(payload.validation?.head === payload.commit, 'rework validation head does not match commit')
-      assert(payload.validation.focused === 'passed', 'rework requires passing focused validation')
-      assert(Array.isArray(payload.validation.checks) && payload.validation.checks.length > 0 && payload.validation.checks.every((check) => typeof check.command === 'string' && check.command.trim() && check.exitCode === 0), 'rework requires successful recorded focused checks')
+      validateFocused(payload.validation, payload.commit)
+      state.version = DELIVERY_STATE_VERSION
       state.previousReview = { base: state.baseSha, head: state.currentHead, receipts: state.reviewReceipts, findings: state.findings }
       state.previousHead = state.currentHead
       state.currentHead = payload.commit
       state.validation = payload.validation ?? null
+      delete state.focusedValidation
       state.reworkCycles += 1
       state.reviewReceipts = []
       state.findings = []
@@ -177,16 +218,24 @@ export function transitionDeliveryState(current, event, payload = {}) {
       break
     case 'validation_refreshed':
       assert(['APPROVED', 'SHIPPING'].includes(state.state), 'validation_refreshed requires APPROVED or SHIPPING')
-      assert(payload.validation?.result === 'passed' && payload.validation.head === state.currentHead && payload.validation.base === state.baseSha, 'verified validation required')
+      validateReviewReceipts(state, state.reviewReceipts, state.version === 1)
+      assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      validateGate(state, payload.validation)
       state.validation = payload.validation
       break
     case 'start_shipping':
       requireState(state, 'APPROVED', event)
-      state.validation = payload.validation ?? state.validation ?? null
+      validateReviewReceipts(state, state.reviewReceipts, state.version === 1)
+      assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      validateGate(state, payload.validation ?? state.validation)
+      state.validation = payload.validation ?? state.validation
       state.state = 'SHIPPING'
       break
     case 'shipped':
       requireState(state, 'SHIPPING', event)
+      validateReviewReceipts(state, state.reviewReceipts, state.version === 1)
+      assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      validateGate(state, state.validation)
       assert(payload.mergeCommit, 'shipped requires mergeCommit')
       assert(payload.pr, 'shipped requires pr')
       if (state.policy?.completionCheck) {
@@ -273,7 +322,7 @@ export function deliverySummary(state) {
     runtime: ['restoreRequired', 'vmState', 'actualMemoryGiB', 'restorationProof', 'foregroundSession'],
     cleanup: ['worktreeRemoved', 'metadataPruned', 'archive', 'manifestSha256'],
     tracker: ['status', 'checkpointId', 'completedAt'],
-    validation: ['receipt', 'binding', 'head', 'result'],
+    validation: ['kind', 'receipt', 'binding', 'base', 'head', 'result', 'profile'],
   }
   for (const [key, names] of Object.entries(fields)) {
     if (state[key]) summary[key] = Object.fromEntries(names.filter(name => state[key][name] !== undefined).map(name => [name, state[key][name]]))
@@ -287,20 +336,26 @@ export function deliverySummary(state) {
 }
 
 export function deliveryCheckpoint(state) {
-  const checkpoint = { ...deliverySummary(state), reviewReceipts: ['REWORKING', 'REVIEWING'].includes(state.state) ? [] : state.reviewReceipts,
-    validation: state.validation, escalationCount: state.escalationCount }
+  const checkpoint = { version: state.version, ...deliverySummary(state), reviewReceipts: ['REWORKING', 'REVIEWING', 'VALIDATING'].includes(state.state) ? [] : state.reviewReceipts,
+    validation: state.validation, focusedValidation: state.focusedValidation, escalationCount: state.escalationCount }
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
+}
+
+function checkDeliveryWorktree(state) {
+  assert(typeof state.worktree === 'string', 'missing delivery worktree')
+  const cwd = realpathSync(state.worktree)
+  const git = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }).trim()
+  assert(git(['rev-parse', '--verify', 'HEAD']) === state.currentHead, 'unexpected worktree head')
+  assert(git(['status', '--porcelain=v1', '--untracked-files=normal']) === '', 'dirty validation worktree')
+  assert(git(['ls-files', '-v', '-z']).split('\0').filter(Boolean).every((entry) => entry.startsWith('H ')), 'hidden index flags refused')
+  git(['merge-base', '--is-ancestor', state.baseSha, state.currentHead])
+  return { cwd, git }
 }
 
 export function checkProjectValidation(state, config, requestedBinding = state.validation?.binding) {
   try {
-    assert(typeof state.worktree === 'string' && typeof config.commands.validationProof === 'string', 'missing validation verifier')
-    const cwd = realpathSync(state.worktree)
-    const git = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }).trim()
-    assert(git(['rev-parse', '--verify', 'HEAD']) === state.currentHead, 'unexpected worktree head')
-    assert(git(['status', '--porcelain=v1', '--untracked-files=normal']) === '', 'dirty validation worktree')
-    assert(git(['ls-files', '-v', '-z']).split('\0').filter(Boolean).every((entry) => entry.startsWith('H ')), 'hidden index flags refused')
-    git(['merge-base', '--is-ancestor', state.baseSha, state.currentHead])
+    assert(typeof config.commands.validationProof === 'string', 'missing validation verifier')
+    const { cwd, git } = checkDeliveryWorktree(state)
     const script = realpathSync(resolve(cwd, config.commands.validationProof)), scriptPath = relative(cwd, script)
     assert(scriptPath && !scriptPath.startsWith('..') && !isAbsolute(scriptPath), 'invalid validation verifier path')
     git(['ls-files', '--error-unmatch', '--', scriptPath])
@@ -374,6 +429,7 @@ async function main() {
       maxReworkCycles: config.delivery.maxReworkCycles,
       maxEscalations: config.delivery.maxEscalations,
       completionCheck: config.commands.completionCheck,
+      validationMode: config.delivery.validationMode,
     })
     await writeDeliveryState(repoRoot, state)
     process.stdout.write(`${JSON.stringify(state)}\n`)
@@ -382,6 +438,15 @@ async function main() {
   if (command === 'show' || command === 'summary') {
     const state = await readDeliveryState(repoRoot, flags.card)
     process.stdout.write(`${JSON.stringify(command === 'summary' ? deliverySummary(state) : state, null, 2)}\n`)
+    return
+  }
+  if (command === 'review-ready') {
+    const state = await readDeliveryState(repoRoot, flags.card)
+    assert([1, DELIVERY_STATE_VERSION].includes(state.version), 'unsupported delivery state version; needs human reconciliation')
+    requireState(state, 'REVIEWING', command)
+    validateFocused(state.validation, state.currentHead)
+    checkDeliveryWorktree(state)
+    process.stdout.write(`${JSON.stringify({ card: state.card, head: state.currentHead, scope: 'code_and_focused_checks' })}\n`)
     return
   }
   if (command === 'event') {
@@ -393,8 +458,20 @@ async function main() {
         ? JSON.parse(await readFile(resolve(repoRoot, flags['payload-file']), 'utf8'))
         : flags.payload ? JSON.parse(flags.payload) : {}
     } catch { throw new Error('INVALID_DELIVERY_PAYLOAD') }
-    if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event) && config.commands.validationProof) {
-      payload.validation = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
+    if (['review_findings', 'reviews_approved', 'review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
+      checkDeliveryWorktree(current)
+    }
+    if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
+      if (flags.event === 'review_approved') requireState(current, 'VALIDATING', flags.event)
+      current.policy.validationMode = config.delivery.validationMode
+      if (config.commands.validationProof) {
+        const verified = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
+        if (flags.event === 'start_shipping') {
+          assert(current.validation?.bindingSha256 === verified.bindingSha256
+            && current.validation?.receiptSha256 === verified.receiptSha256, 'validation evidence changed; refresh required')
+        }
+        payload.validation = { ...(payload.validation ?? current.validation), ...verified }
+      }
     }
     if (flags.event === 'shipped' && config.commands.completionCheck) {
       current.policy.completionCheck = config.commands.completionCheck
@@ -405,7 +482,7 @@ async function main() {
     process.stdout.write(`${JSON.stringify(next)}\n`)
     return
   }
-  throw new Error('Usage: delivery-state.mjs <init|show|summary|event> --card PROJ-123 ...')
+  throw new Error('Usage: delivery-state.mjs <init|show|summary|review-ready|event> --card PROJ-123 ...')
 }
 
 const isDirectRun = process.argv[1]

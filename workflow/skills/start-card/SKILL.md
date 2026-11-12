@@ -55,7 +55,11 @@ fresh-context retry. A further match becomes `NEEDS_HUMAN`.
 
 ## 4. Dispatch independent review
 
-Transition to `REVIEWING`. Before dispatch or resume, publish and reread the
+Transition to `REVIEWING`. Run `delivery-state.mjs review-ready --card <CARD>`
+before every review dispatch, including resume. It checks recorded successful
+focused checks for this head and live clean Git state; also inspect their actual
+coverage and any stricter project/card requirements. Failure blocks dispatch.
+Before dispatch or resume, publish and reread the
 checkpoint with review receipts removed while in `REVIEWING` or `REWORKING`;
 if it cannot be sanitized, stop. Each fresh reviewer receives card ID, path, base
 SHA, current head SHA, and reviewer slot; a bounded rework may also supply the
@@ -64,20 +68,35 @@ slot-specific prior receipt and its reviewed head.
 - simple, standard, complex: one reviewer;
 - critical: reviewers A and B concurrently on their distinct routed models.
 
-Require `/code-review` and exact-head receipts. Never pass implementation
+Require `/code-review` and exact-head receipts with `scope: code_and_focused_checks`.
+Never pass implementation
 transcripts, rationale, conclusions, or another review.
 
-If every required receipt approves the current head, run the configured
+If every required receipt approves the current head, record `reviews_approved`
+with those receipts, moving `REVIEWING -> VALIDATING`. This is code approval
+only: shipping is still forbidden. Sanitize the shared checkpoint in VALIDATING
+too; reviewer receipts remain in local state until delivery approval.
+Run the configured
 `commands.fullCheck` on that exact head unless fresh auditable evidence of the
 required project validation already exists. With `delivery.validationMode: full`,
 this must be the full gate. With explicit `project` mode, the project's tested,
 fail-closed impact policy may select a reduced gate; missing, stale, ambiguous,
-or sensitive impact requires the full gate. Record the selected profile and why.
+or sensitive impact requires the full gate. Record `validation.kind: required_gate`,
+`result: passed`, frozen `base`, approved `head`, selected `profile`, policy
+`reason`, non-empty executed `checks: [{command, exitCode: 0}]`, and the auditable
+`receipt` path. Without a configured command, obtain the project's explicit gate
+and auditable evidence; absence of a command never implies a pass.
 Bind the receipt using `commands.validationProof` when configured and pass its
 returned binding path in `review_approved` payload `validation.binding`. The
 `review_approved` event verifies that proof before transitioning to `APPROVED`;
 any failure blocks shipping. Preserve the verified binding and receipt for the
 final archive.
+On a gate failure stay in VALIDATING; do not dispatch shipping. Any code change
+requires fresh focused checks and all required reviews on the new head. Reconcile
+unexpected commits/base changes with a human rather than editing frozen SHAs or
+reusing old receipts. Resume VALIDATING by verifying its local exact-head
+approvals and running/verifying only the missing gate, never inventing receipts
+from the sanitized shared checkpoint.
 Otherwise deduplicate findings by `(file, line, requirement)`; confirm each
 finding with an observable scenario or explicit requirement and collect all
 confirmed blocking findings before rework. Record nonblocking suggestions without

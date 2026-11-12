@@ -21,18 +21,20 @@ hardened and in the configured implementing state.
 3. Use TDD at declared seams where practical; prove required regression tests fail
    before the fix.
 4. Implement only the card.
-5. Run focused proof, card validation, then configured `commands.fullCheck`. An
-   unavailable required check is a blocker, not a pass.
-   In default `full` mode this command must run the full gate. In explicit
-   `project` mode it may run the project's tested impact policy; uncertainty or
-   sensitive changes require full validation. Record the profile and reason.
+5. Run focused proof and all checks required before commit/review by project
+   instructions or the card, including a build when required. An unavailable or
+   failing required check blocks review. The workflow defers `commands.fullCheck`
+   until all reviews approve, unless stricter project/card instructions require
+   it earlier. Align the checks with the change's actual risk and acceptance
+   criteria; a token unrelated check is insufficient.
    Align the intended index before validation; leave tested contents unchanged.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
-7. Persist objective validation and transition the checkpoint to `REVIEWING`.
-   When `commands.validationProof` is configured, use its `bind` entry point
-   after commit and persist the returned binding path with validation. Pass full
-   base/head SHAs; keep the raw receipt unchanged.
+7. Persist `validation.head` equal to the new commit, `validation.focused: passed`,
+   and a non-empty `validation.checks` array of `{command, exitCode: 0}` for the
+   checks actually passed on these unchanged contents. Transition to `REVIEWING`.
+   Focused validation is not a required-gate receipt. Binding the final gate is
+   the orchestrator's responsibility after reviews; never rebind an older receipt.
 
 Return the implementation handoff from the delivery contract and stop. Do not
 review, rework, push/merge a PR, or select another card.

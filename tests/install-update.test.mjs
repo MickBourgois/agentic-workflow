@@ -5,6 +5,7 @@ import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { createHash } from 'node:crypto'
 
 const SOURCE = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 
@@ -92,9 +93,43 @@ test('installed runtime is independent from the source checkout', async () => {
   assert.equal(JSON.parse(output).implementation.model, 'gpt-6-luna')
 
   const manifest = JSON.parse(await readFile(join(repo, '.agent-workflow/manifest.json'), 'utf8'))
+  const version = (await readFile(join(SOURCE, 'VERSION'), 'utf8')).trim()
+  assert.equal(version, '0.7.0')
+  assert.equal(JSON.parse(await readFile(join(SOURCE, 'package.json'), 'utf8')).version, version)
+  assert.equal(JSON.parse(await readFile(join(SOURCE, 'package-lock.json'), 'utf8')).version, version)
+  assert.equal(manifest.installedVersion, version)
   for (const path of Object.keys(manifest.files)) {
     const text = await readFile(join(repo, path), 'utf8')
+    const hash = createHash('sha256').update(text).digest('hex')
+    assert.equal(manifest.files[path].managedSha256, hash, path)
+    assert.equal(manifest.files[path].sourceSha256, hash, path)
     assert.doesNotMatch(text, /ScrybeCast|Scrybecast|MickBourgois|\/Users\/|SCR-/i, path)
     assert.doesNotMatch(text, new RegExp(SOURCE.replaceAll(/[.*+?^${}()|[\]\\]/g, '\\$&')), path)
+  }
+})
+
+test('0.7.0 update preserves legacy runtime/checkpoints and regenerates distribution hashes', async () => {
+  const repo = await makeRepo('agent-workflow-legacy-update-')
+  run(SOURCE, 'install', repo)
+  const manifestPath = join(repo, '.agent-workflow/manifest.json')
+  const manifest = JSON.parse(await readFile(manifestPath, 'utf8'))
+  manifest.installedVersion = '0.6.0'
+  await writeFile(join(repo, '.agent-workflow/VERSION'), '0.6.0\n')
+  manifest.files['.agent-workflow/VERSION'].managedSha256 = createHash('sha256').update('0.6.0\n').digest('hex')
+  await writeFile(manifestPath, JSON.stringify(manifest))
+  await mkdir(join(repo, '.delivery/state'), { recursive: true })
+  await mkdir(join(repo, '.delivery/checkpoints'), { recursive: true })
+  const state = '{"version":1,"state":"SHIPPING","validation":{"binding":"old-binding"}}\n'
+  const checkpoint = '<!-- delivery-checkpoint:v1 -->\nlegacy evidence\n'
+  await writeFile(join(repo, '.delivery/state/PROJ-701.json'), state)
+  await writeFile(join(repo, '.delivery/checkpoints/PROJ-701.md'), checkpoint)
+  run(SOURCE, 'update', repo)
+  assert.equal(await readFile(join(repo, '.delivery/state/PROJ-701.json'), 'utf8'), state)
+  assert.equal(await readFile(join(repo, '.delivery/checkpoints/PROJ-701.md'), 'utf8'), checkpoint)
+  const next = JSON.parse(await readFile(manifestPath, 'utf8'))
+  assert.equal(next.installedVersion, '0.7.0')
+  assert.deepEqual(next.conflicts, [])
+  for (const [path, entry] of Object.entries(next.files)) {
+    assert.equal(entry.managedSha256, createHash('sha256').update(await readFile(join(repo, path))).digest('hex'))
   }
 })
