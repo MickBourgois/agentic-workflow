@@ -88,6 +88,12 @@ export async function loadConfig(repoRoot) {
   if (config.tracker.provider !== 'linear') {
     throw new Error(`Unsupported tracker provider: ${config.tracker.provider}. Version 0.1 supports Linear.`)
   }
+  if (!['full', 'project'].includes(config.delivery.validationMode)) {
+    throw new Error('Invalid delivery.validationMode: expected full or project')
+  }
+  if (config.delivery.validationMode === 'project' && project.delivery?.validationMode !== 'project') {
+    throw new Error('Project validation mode must be explicitly enabled in project configuration')
+  }
   try {
     new RegExp(config.tracker.cardPattern)
   } catch (error) {

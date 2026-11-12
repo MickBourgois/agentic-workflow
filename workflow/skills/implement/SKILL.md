@@ -23,7 +23,10 @@ hardened and in the configured implementing state.
 4. Implement only the card.
 5. Run focused proof, card validation, then configured `commands.fullCheck`. An
    unavailable required check is a blocker, not a pass.
-   Align the intended index before the full gate; leave tested contents unchanged.
+   In default `full` mode this command must run the full gate. In explicit
+   `project` mode it may run the project's tested impact policy; uncertainty or
+   sensitive changes require full validation. Record the profile and reason.
+   Align the intended index before validation; leave tested contents unchanged.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
 7. Persist objective validation and transition the checkpoint to `REVIEWING`.

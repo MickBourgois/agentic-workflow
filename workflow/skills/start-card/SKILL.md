@@ -67,8 +67,12 @@ slot-specific prior receipt and its reviewed head.
 Require `/code-review` and exact-head receipts. Never pass implementation
 transcripts, rationale, conclusions, or another review.
 
-If every required receipt approves the current head, run the configured full
-check on that exact head unless fresh auditable full evidence already exists.
+If every required receipt approves the current head, run the configured
+`commands.fullCheck` on that exact head unless fresh auditable evidence of the
+required project validation already exists. With `delivery.validationMode: full`,
+this must be the full gate. With explicit `project` mode, the project's tested,
+fail-closed impact policy may select a reduced gate; missing, stale, ambiguous,
+or sensitive impact requires the full gate. Record the selected profile and why.
 Bind the receipt using `commands.validationProof` when configured and pass its
 returned binding path in `review_approved` payload `validation.binding`. The
 `review_approved` event verifies that proof before transitioning to `APPROVED`;

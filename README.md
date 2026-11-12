@@ -221,8 +221,10 @@ Each manual phase still runs in a new task/context and stops at its contract.
 Rework records successful focused checks for the new commit before review. A
 bounded correction may receive an incremental review using only that slot’s own
 previous receipt from local state; missing local context, sensitive or uncertain
-impact requires the complete diff. A
-full check remains mandatory on the final head before approval and shipping.
+impact requires the complete diff. A full check remains the default on the final
+head before approval and shipping. A project can explicitly opt into a tested,
+fail-closed impact policy to select a reduced required gate; uncertainty and
+sensitive changes still require the full gate. See the project integration contract.
 When `commands.validationProof` is not configured, enforcing and recording that
 proof remains the responsibility of the project workflow rather than the CLI.
 
@@ -309,7 +311,7 @@ activating project-specific checks requires their own Node entry points.
 
 ## Versioning
 
-The current source version is `0.5.0`. Releases use SemVer tags such as `v0.5.0` and
+The current source version is `0.6.0`. Releases use SemVer tags such as `v0.6.0` and
 `v1.0.0`.
 
 ## Current limitations

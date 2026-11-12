@@ -24,12 +24,15 @@ worktree or proof is unavailable, stop; do not invent evidence.
 
 1. Require a clean worktree, card-only diff, matching head, and all routed
    approvals.
-2. Run configured full check unless fresh auditable evidence proves this exact
+2. Run configured `commands.fullCheck` unless fresh auditable evidence proves this exact
    head. Set the frozen base for the gate; if no valid binding exists, bind the
-   successful immutable full-gate receipt to the approved head with
+   successful immutable required-gate receipt to the approved head with
    `commands.validationProof` when configured, then verify it. Otherwise record
    auditable project evidence for the approved head. Never accept focused proof or a
-   binding from an earlier head. Run remaining card-specific release, migration,
+   binding from an earlier head. Default `delivery.validationMode: full` requires
+   the full gate. Explicit `project` mode permits only a reduced profile selected
+   by the project's tested fail-closed impact policy; otherwise require full.
+   Run remaining card-specific release, migration,
    and security gates; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.
 4. Pull/rebase against the current configured remote/base before push when needed.

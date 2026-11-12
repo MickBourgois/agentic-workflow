@@ -22,6 +22,13 @@ labels, environment files that a worktree may copy, and project-specific safety
 warnings. Environment file names may be configured; their contents are never
 copied into the workflow source, manifest, logs, or reports.
 
+`delivery.validationMode` defaults to `full`. Projects may explicitly set it to
+`project` only when `commands.fullCheck` executes a documented, tested impact
+policy that records profile, reason, base, head and executed checks and falls
+back to full for missing, ambiguous or sensitive coverage. Project CI and proof
+verification must enforce the same policy; otherwise retain `full` mode. The
+legacy command key is retained for compatibility.
+
 Optional project Node entry points in `commands`:
 
 - `validationProof`: binds/verifies the project's immutable validation receipt

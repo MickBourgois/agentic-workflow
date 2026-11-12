@@ -1,5 +1,9 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
+import { mkdtemp, writeFile, unlink, rmdir } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
+import { loadConfig } from '../workflow/orchestrator/config.mjs'
 import { FIXED_ROUTES } from '../workflow/config/defaults.mjs'
 import {
   createDeliveryState,
@@ -7,6 +11,25 @@ import {
   routeFor,
   transitionDeliveryState,
 } from '../workflow/orchestrator/delivery-state.mjs'
+
+test('project validation profiles require explicit opt-in and reject unknown modes', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'workflow-validation-mode-'))
+  const config = join(root, 'agent-workflow.config.json')
+  const local = join(root, '.agent-workflow.local.json')
+  try {
+    assert.equal((await loadConfig(root)).delivery.validationMode, 'full')
+    await writeFile(local, JSON.stringify({ delivery: { validationMode: 'project' } }))
+    await assert.rejects(loadConfig(root), /explicitly enabled in project configuration/)
+    await unlink(local)
+    await writeFile(config, JSON.stringify({ delivery: { validationMode: 'project' } }))
+    assert.equal((await loadConfig(root)).delivery.validationMode, 'project')
+    await writeFile(config, JSON.stringify({ delivery: { validationMode: 'unexpected' } }))
+    await assert.rejects(loadConfig(root), /Invalid delivery.validationMode/)
+  } finally {
+    await unlink(config)
+    await rmdir(root)
+  }
+})
 
 function implemented(state, commit = 'abc123') {
   return transitionDeliveryState(
