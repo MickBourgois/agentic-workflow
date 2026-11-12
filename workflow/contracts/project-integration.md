@@ -25,7 +25,14 @@ copied into the workflow source, manifest, logs, or reports.
 Optional project Node entry points in `commands`:
 
 - `validationProof`: binds/verifies the project's immutable validation receipt
-  against an explicit base/head; agents persist and reuse its actual output path.
+  against an explicit base/head. Before `review_approved`, the state CLI invokes
+  `node <script> verify --card <CARD> --base <SHA> --head <SHA>` in the card
+  worktree; it must emit JSON `{result,card,head,binding}`. The binding JSON must
+  identify `result`, `card`, `base`, `head`, `receipt` and `receiptSha256`; both
+  paths must resolve inside the worktree. The verifier must be tracked in a clean
+  worktree at the expected head, with base an ancestor; hidden index flags such
+  as assume-unchanged and skip-worktree are refused. Failure blocks approval. The state
+  records SHA-256 hashes of binding and receipt for the completion check.
 - `completionCheck`: receives `{state,payload,config}` on stdin before `shipped`,
   exits nonzero on missing/contradictory project evidence, or returns
   `{result:"passed",head,base,mergeCommit,...}`. Its public reconciled fields

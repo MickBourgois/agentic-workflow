@@ -17,6 +17,11 @@ creates substitute evidence.
 
 ## Final gate
 
+On resume of a pre-0.5 approval or shipping state with `validationProof`
+configured, verify the existing full binding before deleting the worktree and
+record it using `delivery-state.mjs event --event validation_refreshed`. If the
+worktree or proof is unavailable, stop; do not invent evidence.
+
 1. Require a clean worktree, card-only diff, matching head, and all routed
    approvals.
 2. Run configured full check unless fresh auditable evidence proves this exact
@@ -40,6 +45,10 @@ and mergeability. Confirm merge on the configured base and required deployment/
 safe-smoke proof before setting the card to done.
 
 ## Cleanup
+
+When validation proof is configured, archive the verified binding and its raw
+receipt with their recorded hashes before removing the worktree; pass their
+archive paths to the project completion checker.
 
 After confirmed merge only, remove this card's clean inactive worktree with
 `git worktree remove`, prune metadata, and stop task-owned processes. Preserve

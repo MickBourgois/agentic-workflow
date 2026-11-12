@@ -1,8 +1,9 @@
 #!/usr/bin/env node
 
 import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { realpathSync } from 'node:fs'
-import { dirname, resolve } from 'node:path'
+import { readFileSync, realpathSync } from 'node:fs'
+import { createHash } from 'node:crypto'
+import { dirname, resolve, relative, isAbsolute } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
@@ -141,6 +142,7 @@ export function transitionDeliveryState(current, event, payload = {}) {
       validateReviewReceipts(state, payload.receipts)
       assert(payload.receipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
       state.reviewReceipts = payload.receipts
+      state.validation = payload.validation ?? state.validation ?? null
       state.state = 'APPROVED'
       break
     case 'review_findings':
@@ -173,8 +175,14 @@ export function transitionDeliveryState(current, event, payload = {}) {
       state.findings = []
       state.state = 'REVIEWING'
       break
+    case 'validation_refreshed':
+      assert(['APPROVED', 'SHIPPING'].includes(state.state), 'validation_refreshed requires APPROVED or SHIPPING')
+      assert(payload.validation?.result === 'passed' && payload.validation.head === state.currentHead && payload.validation.base === state.baseSha, 'verified validation required')
+      state.validation = payload.validation
+      break
     case 'start_shipping':
       requireState(state, 'APPROVED', event)
+      state.validation = payload.validation ?? state.validation ?? null
       state.state = 'SHIPPING'
       break
     case 'shipped':
@@ -284,6 +292,41 @@ export function deliveryCheckpoint(state) {
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
 
+export function checkProjectValidation(state, config) {
+  try {
+    assert(typeof state.worktree === 'string' && typeof config.commands.validationProof === 'string', 'missing validation verifier')
+    const cwd = realpathSync(state.worktree)
+    const git = (args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }).trim()
+    assert(git(['rev-parse', '--verify', 'HEAD']) === state.currentHead, 'unexpected worktree head')
+    assert(git(['status', '--porcelain=v1', '--untracked-files=normal']) === '', 'dirty validation worktree')
+    assert(git(['ls-files', '-v', '-z']).split('\0').filter(Boolean).every((entry) => entry.startsWith('H ')), 'hidden index flags refused')
+    git(['merge-base', '--is-ancestor', state.baseSha, state.currentHead])
+    const script = realpathSync(resolve(cwd, config.commands.validationProof)), scriptPath = relative(cwd, script)
+    assert(scriptPath && !scriptPath.startsWith('..') && !isAbsolute(scriptPath), 'invalid validation verifier path')
+    git(['ls-files', '--error-unmatch', '--', scriptPath])
+    const output = execFileSync(process.execPath, [script, 'verify', '--card', state.card, '--base', state.baseSha, '--head', state.currentHead], {
+      cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 1024 * 1024,
+    })
+    const verdict = JSON.parse(output)
+    assert(verdict.result === 'passed' && verdict.card === state.card && verdict.head === state.currentHead, 'invalid validation verdict')
+    const localPath = (path) => {
+      assert(typeof path === 'string' && path.length > 0, 'missing evidence path')
+      const file = realpathSync(resolve(cwd, path)), part = relative(cwd, file)
+      assert(part && !part.startsWith('..') && !isAbsolute(part), 'invalid evidence path')
+      return file
+    }
+    const raw = readFileSync(localPath(verdict.binding)), binding = JSON.parse(raw)
+    const digest = (value) => createHash('sha256').update(value).digest('hex')
+    assert(binding.result === 'passed' && binding.card === state.card && binding.base === state.baseSha && binding.head === state.currentHead, 'invalid binding')
+    const receipt = readFileSync(localPath(binding.receipt))
+    assert(digest(receipt) === binding.receiptSha256, 'invalid receipt hash')
+    return { result: 'passed', head: state.currentHead, base: state.baseSha, binding: verdict.binding,
+      bindingSha256: digest(raw), receipt: binding.receipt, receiptSha256: binding.receiptSha256 }
+  } catch {
+    throw new Error('PROJECT_VALIDATION_CHECK_FAILED')
+  }
+}
+
 export function checkProjectCompletion(repoRoot, state, payload, config) {
   const script = config.commands.completionCheck
   assert(typeof script === 'string' && script.length > 0, 'completion check not configured')
@@ -348,6 +391,9 @@ async function main() {
         ? JSON.parse(await readFile(resolve(repoRoot, flags['payload-file']), 'utf8'))
         : flags.payload ? JSON.parse(flags.payload) : {}
     } catch { throw new Error('INVALID_DELIVERY_PAYLOAD') }
+    if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event) && config.commands.validationProof) {
+      payload.validation = checkProjectValidation(current, config)
+    }
     if (flags.event === 'shipped' && config.commands.completionCheck) {
       current.policy.completionCheck = config.commands.completionCheck
       payload.completion = checkProjectCompletion(repoRoot, current, payload, config)

@@ -134,7 +134,7 @@ Critical reviewers run independently. The orchestrator unions duplicates by
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
 structured findings only. Output the new commit, findings addressed, focused
 validation, and unresolved blockers. Rework never runs the next review; the full
-gate and exact-head binding remain mandatory at shipping.
+gate and exact-head binding remain mandatory before approval and shipping.
 
 ### Shipping
 
@@ -179,7 +179,10 @@ not full commit diffs or issue bodies for a status lookup. Use
 logs and history stay in files and are read only to investigate a specific issue.
 
 1. Fetch the full card, relations, routing comment, and checkpoint.
-2. Inspect live branches, worktrees, commits, PR, CI, and merge state.
+2. Inspect live branches, worktrees, commits, PR, CI, and merge state. For a
+   pre-0.5 `APPROVED` or `SHIPPING` state with a configured verifier, refresh
+   proof via `validation_refreshed` while its worktree still exists; otherwise
+   stop rather than fabricate missing evidence.
 3. Reconcile to the last state with durable evidence. Approval names the current
    head; `DONE` requires a confirmed merge.
 4. Resume only the next phase in a fresh context.

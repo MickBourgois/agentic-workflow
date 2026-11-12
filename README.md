@@ -222,7 +222,7 @@ Rework records successful focused checks for the new commit before review. A
 bounded correction may receive an incremental review using only that slot’s own
 previous receipt from local state; missing local context, sensitive or uncertain
 impact requires the complete diff. A
-full check remains mandatory on the approved head before shipping.
+full check remains mandatory on the final head before approval and shipping.
 
 ## Agents
 

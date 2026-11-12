@@ -67,7 +67,12 @@ slot-specific prior receipt and its reviewed head.
 Require `/code-review` and exact-head receipts. Never pass implementation
 transcripts, rationale, conclusions, or another review.
 
-If every required receipt approves the current head, transition to `APPROVED`.
+If every required receipt approves the current head, run the configured full
+check on that exact head unless fresh auditable full evidence already exists.
+Bind the receipt using `commands.validationProof` when configured. The
+`review_approved` event verifies that proof before transitioning to `APPROVED`;
+any failure blocks shipping. Preserve the verified binding and receipt for the
+final archive.
 Otherwise deduplicate findings by `(file, line, requirement)`; confirm each
 finding with an observable scenario or explicit requirement and collect all
 confirmed blocking findings before rework. Record nonblocking suggestions without

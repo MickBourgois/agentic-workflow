@@ -27,7 +27,7 @@ security decisions return `needs_human` without edits.
    Set `validation.head` to the new commit and `validation.focused` to `passed`
    only after the required focused checks pass. Set `validation.checks` to a
    non-empty array of `{command, exitCode: 0}` for the checks actually run;
-   a previous full-gate receipt does not apply to the new commit. The shipper runs and binds the final full gate.
+   a previous full-gate receipt does not apply to the new commit. The orchestrator runs and binds the final full gate before approval.
 
 Return card, `rework_complete`, previous/new SHA, findings addressed, validation,
 and unresolved blockers. Then stop. Rework never starts the next review or ships.

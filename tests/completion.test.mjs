@@ -1,9 +1,11 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { createHash } from 'node:crypto'
+import { execFileSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { createDeliveryState, transitionDeliveryState, writeDeliveryState, checkProjectCompletion, deliverySummary } from '../workflow/orchestrator/delivery-state.mjs'
+import { createDeliveryState, transitionDeliveryState, writeDeliveryState, checkProjectCompletion, checkProjectValidation, deliverySummary } from '../workflow/orchestrator/delivery-state.mjs'
 
 function shipping() {
   let state = createDeliveryState({ card: 'PROJ-301', complexity: 'standard', baseSha: 'base', completionCheck: 'completion.mjs' })
@@ -56,4 +58,46 @@ test('routine summaries omit full history, diffs, and private runtime fields', (
   assert.equal(summary.currentHead, 'head')
   assert.equal(summary.runtime.vmState, 'Stopped')
   assert.equal(JSON.stringify(summary).includes('fixture-do-not-emit'), false)
+})
+
+test('approval verifier fails closed on dirty verifier, stale head or tampered evidence', async () => {
+  const directory = await mkdtemp(join(tmpdir(), 'workflow-validation-'))
+  const git = (...args) => execFileSync('git', args, { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
+  git('init'); git('config', 'user.email', 'fixture@example.test'); git('config', 'user.name', 'Fixture')
+  await writeFile(join(directory, '.gitignore'), 'proof/\n')
+  const script = `const args=process.argv;console.log(JSON.stringify({result:'passed',card:args[args.indexOf('--card')+1],head:args[args.indexOf('--head')+1],binding:'proof/binding.json'}))`
+  await writeFile(join(directory, 'verify.mjs'), script)
+  git('add', '.gitignore', 'verify.mjs'); git('commit', '-m', 'fixture')
+  const head = git('rev-parse', 'HEAD')
+  const state = { card: 'PROJ-301', baseSha: head, currentHead: head, worktree: directory }
+  const config = { commands: { validationProof: 'verify.mjs' } }
+  await mkdir(join(directory, 'proof'))
+  const receipt = '{}', digest = createHash('sha256').update(receipt).digest('hex')
+  const binding = { result: 'passed', card: state.card, base: head, head, receipt: 'proof/receipt.json', receiptSha256: digest }
+  await writeFile(join(directory, 'proof/receipt.json'), receipt)
+  await writeFile(join(directory, 'proof/binding.json'), JSON.stringify(binding))
+  assert.equal(checkProjectValidation(state, config).receiptSha256, digest)
+  await writeFile(join(directory, 'verify.mjs'), 'console.log("forged")')
+  assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
+  await writeFile(join(directory, 'verify.mjs'), script)
+  for (const flag of ['--assume-unchanged', '--skip-worktree']) {
+    git('update-index', flag, 'verify.mjs')
+    await writeFile(join(directory, 'verify.mjs'), 'console.log("forged")')
+    assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
+    await writeFile(join(directory, 'verify.mjs'), script)
+    git('update-index', flag === '--skip-worktree' ? '--no-skip-worktree' : '--no-assume-unchanged', 'verify.mjs')
+  }
+  await writeFile(join(directory, 'proof/receipt.json'), 'tampered')
+  assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
+  await writeFile(join(directory, 'proof/receipt.json'), receipt)
+  await writeFile(join(directory, 'proof/binding.json'), JSON.stringify({ ...binding, head: 'old' }))
+  assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
+})
+
+test('legacy shipping state accepts only a verified exact-head validation refresh', () => {
+  const state = shipping()
+  assert.throws(() => transitionDeliveryState(state, 'validation_refreshed', { validation: { result: 'passed', head: 'old', base: 'base' } }), /verified validation/)
+  const next = transitionDeliveryState(state, 'validation_refreshed', { validation: { result: 'passed', head: 'head', base: 'base' } })
+  assert.equal(next.state, 'SHIPPING')
+  assert.equal(next.validation.head, 'head')
 })
