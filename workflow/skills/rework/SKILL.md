@@ -19,11 +19,15 @@ security decisions return `needs_human` without edits.
 2. Reproduce or verify each finding.
 3. Make the smallest correction for confirmed findings only.
 4. Add or adjust proof for each correction.
-5. Run affected proof, invalidated card checks, and configured full check.
+5. Run affected proof and invalidated card checks. Record commands and results;
+   unavailable or failing required focused checks block review. Do not call this
+   a full gate or reuse a stale binding.
 6. Create one card/finding-referencing commit, update the checkpoint to
    `REVIEWING`, and increment the cycle.
-   Use configured `commands.validationProof` to bind the immutable full-gate
-   receipt to that commit; persist the actual returned path, never a guessed name.
+   Set `validation.head` to the new commit and `validation.focused` to `passed`
+   only after the required focused checks pass. Set `validation.checks` to a
+   non-empty array of `{command, exitCode: 0}` for the checks actually run;
+   a previous full-gate receipt does not apply to the new commit. The shipper runs and binds the final full gate.
 
 Return card, `rework_complete`, previous/new SHA, findings addressed, validation,
 and unresolved blockers. Then stop. Rework never starts the next review or ships.

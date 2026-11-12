@@ -107,7 +107,9 @@ notes:
 ### Review
 
 Input: card ID, repository/worktree, base SHA, head SHA, reviewer slot. Never pass
-implementation transcripts, rationale, conclusions, or another review.
+implementation transcripts, rationale, conclusions, or another slot's review.
+For a bounded rework, the same slot may receive its own prior receipt and head;
+its new review and receipt must cover the current head as specified by the skill.
 
 ```yaml
 card: PROJ-123
@@ -130,13 +132,14 @@ Critical reviewers run independently. The orchestrator unions duplicates by
 ### Rework
 
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
-structured findings only. Output the new commit, findings addressed, validation,
-and unresolved blockers. Rework never runs the next review.
+structured findings only. Output the new commit, findings addressed, focused
+validation, and unresolved blockers. Rework never runs the next review; the full
+gate and exact-head binding remain mandatory at shipping.
 
 ### Shipping
 
-Input: card ID, worktree, approved head, validation, and required review receipts
-for that exact head. Shipping may push, open/update the PR, wait for CI, merge when
+Input: card ID, worktree, frozen base SHA, approved head, validation, and required
+review receipts for that exact head. Shipping may push, open/update the PR, wait for CI, merge when
 repository rules allow it, verify deployment, update the tracker, and clean the
 worktree. It never edits application code or manufactures review evidence.
 

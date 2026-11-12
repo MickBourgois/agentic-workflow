@@ -218,6 +218,11 @@ Manual phase commands remain available when deliberately bypassing orchestration
 
 Each manual phase still runs in a new task/context and stops at its contract.
 
+Rework records successful focused checks for the new commit before review. A
+bounded correction may receive an incremental review using only that slot’s own
+previous receipt; sensitive or uncertain impact requires the complete diff. A
+full check remains mandatory on the approved head before shipping.
+
 ## Agents
 
 - **Orchestrator (`/start-card`)** reconciles durable state and dispatches phases;
@@ -301,7 +306,7 @@ activating project-specific checks requires their own Node entry points.
 
 ## Versioning
 
-The current source version is `0.4.0`. Releases use SemVer tags such as `v0.4.0` and
+The current source version is `0.5.0`. Releases use SemVer tags such as `v0.5.0` and
 `v1.0.0`.
 
 ## Current limitations

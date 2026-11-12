@@ -8,18 +8,28 @@ disable-model-invocation: true
 
 Run in a fresh read-only context. Read project instructions, the full card and
 comments, `.agent-workflow/contracts/delivery.md`, repository standards, and the
-diff. Do not read implementation transcripts, rationale, or another review.
+diff. Do not read implementation transcripts, rationale, or another reviewer's
+receipt. For a bounded rework only, the orchestrator may supply this slot's own
+previous receipt and its reviewed head; use it as context, not approval.
 
 Require card ID, repository/worktree, base/head SHAs, and reviewer slot (`single`,
 `A`, or `B`). Resolve both SHAs, require a non-empty diff, and review exactly
-`git diff <base>...<head>` plus affected callers and tests.
+`git diff <base>...<head>` plus affected callers and tests on the first review.
+For a bounded rework with a verified previous receipt on the same base, inspect
+`git diff <previous-head> <head>`, affected callers and tests, and all previous
+findings. Review the complete card diff if the base changed, the prior receipt
+is unavailable, scope or impact is uncertain, or a sensitive contract changes.
+Always issue a new receipt for the current head.
 
-When `commands.validationProof` is configured, verify the recorded binding for
-this base/head using that entry point. A raw receipt's precommit head remains
-unchanged; the verifier establishes content/index/blob equality. Consume its
-compact verdict rather than dumping full receipts.
+For an intermediate rework, inspect the recorded focused check commands and
+results for this head. For the initial implementation review, require full-gate proof and, when configured, verify its
+binding with `commands.validationProof`. Only a documented intermediate rework may omit that
+binding; verify it whenever provided. Missing or failing required focused checks, a stale binding, or an unverified
+initial binding when configured blocks approval. Without `validationProof`,
+require auditable project evidence of the initial full gate. A full gate
+bound to the approved head remains mandatory before shipping.
 
-Review every changed file on two axes:
+Review every file in the applicable diff on two axes:
 
 1. **Spec:** missing/partial requirements, scope drift, behavior, edge cases, and
    validation gaps. Reference the exact requirement.

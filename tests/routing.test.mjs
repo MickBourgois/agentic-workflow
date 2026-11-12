@@ -3,6 +3,7 @@ import assert from 'node:assert/strict'
 import { FIXED_ROUTES } from '../workflow/config/defaults.mjs'
 import {
   createDeliveryState,
+  deliveryCheckpoint,
   routeFor,
   transitionDeliveryState,
 } from '../workflow/orchestrator/delivery-state.mjs'
@@ -73,7 +74,16 @@ test('rework invalidates receipts and stops after the configured cycle limit', (
   state = transitionDeliveryState(state, 'review_findings', {
     receipts: [receipt('head0', 'findings')], findings: [{ id: 'RVW-001' }],
   })
-  state = transitionDeliveryState(state, 'rework_complete', { commit: 'head1' })
+  assert.throws(() => transitionDeliveryState(state, 'rework_complete', { commit: 'head1' }), /validation head/)
+  assert.throws(() => transitionDeliveryState(state, 'rework_complete', { commit: 'head1', validation: { binding: 'stale', focused: 'passed' } }), /validation head/)
+  assert.throws(() => transitionDeliveryState(state, 'rework_complete', { commit: 'head1', validation: { head: 'head1', focused: 'passed' } }), /recorded focused/)
+  assert.throws(() => transitionDeliveryState(state, 'rework_complete', { commit: 'head1', validation: { head: 'head1', focused: 'passed', checks: [{ command: 'test', exitCode: 1 }] } }), /recorded focused/)
+  const previousReceipts = state.reviewReceipts
+  state = transitionDeliveryState(state, 'rework_complete', { commit: 'head1', validation: { head: 'head1', focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } })
+  assert.deepEqual(state.previousReview.receipts, previousReceipts)
+  assert.deepEqual(state.previousReview.findings, [{ id: 'RVW-001' }])
+  assert.match(deliveryCheckpoint(state), /RVW-001/)
+  assert.throws(() => transitionDeliveryState(state, 'review_approved', { receipts: previousReceipts }), /head/)
   assert.deepEqual(state.reviewReceipts, [])
   state = transitionDeliveryState(state, 'review_findings', {
     receipts: [receipt('head1', 'findings')], findings: [{ id: 'RVW-002' }],

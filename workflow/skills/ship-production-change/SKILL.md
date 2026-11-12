@@ -20,9 +20,12 @@ creates substitute evidence.
 1. Require a clean worktree, card-only diff, matching head, and all routed
    approvals.
 2. Run configured full check unless fresh auditable evidence proves this exact
-   head. Run remaining card-specific release/migration/security gates.
-   Verify the recorded binding with configured `commands.validationProof` when
-   present; preserve raw receipts.
+   head. Set the frozen base for the gate; if no valid binding exists, bind the
+   successful immutable full-gate receipt to the approved head with
+   `commands.validationProof` when configured, then verify it. Otherwise record
+   auditable project evidence for the approved head. Never accept focused proof or a
+   binding from an earlier head. Run remaining card-specific release, migration,
+   and security gates; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.
 4. Pull/rebase against the current configured remote/base before push when needed.
    A changed head invalidates approvals and returns to the orchestrator.

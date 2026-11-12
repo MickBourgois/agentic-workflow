@@ -161,9 +161,13 @@ export function transitionDeliveryState(current, event, payload = {}) {
       requireState(state, 'REWORKING', event)
       assert(payload.commit, 'rework_complete requires commit')
       assert(payload.commit !== state.currentHead, 'rework must produce a new commit')
+      assert(payload.validation?.head === payload.commit, 'rework validation head does not match commit')
+      assert(payload.validation.focused === 'passed', 'rework requires passing focused validation')
+      assert(Array.isArray(payload.validation.checks) && payload.validation.checks.length > 0 && payload.validation.checks.every((check) => typeof check.command === 'string' && check.command.trim() && check.exitCode === 0), 'rework requires successful recorded focused checks')
+      state.previousReview = { base: state.baseSha, head: state.currentHead, receipts: state.reviewReceipts, findings: state.findings }
       state.previousHead = state.currentHead
       state.currentHead = payload.commit
-      state.validation = payload.validation ?? state.validation ?? null
+      state.validation = payload.validation ?? null
       state.reworkCycles += 1
       state.reviewReceipts = []
       state.findings = []
@@ -276,7 +280,7 @@ export function deliverySummary(state) {
 
 export function deliveryCheckpoint(state) {
   const checkpoint = { ...deliverySummary(state), reviewReceipts: state.reviewReceipts,
-    validation: state.validation, escalationCount: state.escalationCount }
+    previousReview: state.previousReview, validation: state.validation, escalationCount: state.escalationCount }
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
 
