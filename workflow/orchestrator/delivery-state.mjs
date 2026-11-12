@@ -279,8 +279,8 @@ export function deliverySummary(state) {
 }
 
 export function deliveryCheckpoint(state) {
-  const checkpoint = { ...deliverySummary(state), reviewReceipts: state.reviewReceipts,
-    previousReview: state.previousReview, validation: state.validation, escalationCount: state.escalationCount }
+  const checkpoint = { ...deliverySummary(state), reviewReceipts: ['REWORKING', 'REVIEWING'].includes(state.state) ? [] : state.reviewReceipts,
+    validation: state.validation, escalationCount: state.escalationCount }
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
 

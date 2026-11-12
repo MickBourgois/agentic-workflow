@@ -82,7 +82,7 @@ test('rework invalidates receipts and stops after the configured cycle limit', (
   state = transitionDeliveryState(state, 'rework_complete', { commit: 'head1', validation: { head: 'head1', focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } })
   assert.deepEqual(state.previousReview.receipts, previousReceipts)
   assert.deepEqual(state.previousReview.findings, [{ id: 'RVW-001' }])
-  assert.match(deliveryCheckpoint(state), /RVW-001/)
+  assert.doesNotMatch(deliveryCheckpoint(state), /RVW-001/)
   assert.throws(() => transitionDeliveryState(state, 'review_approved', { receipts: previousReceipts }), /head/)
   assert.deepEqual(state.reviewReceipts, [])
   state = transitionDeliveryState(state, 'review_findings', {
@@ -90,6 +90,19 @@ test('rework invalidates receipts and stops after the configured cycle limit', (
   })
   assert.equal(state.state, 'NEEDS_HUMAN')
   assert.equal(state.reason, 'rework_limit_reached')
+})
+
+test('critical rework keeps slot receipts out of the shared checkpoint', () => {
+  let state = implemented(createDeliveryState({ card: 'PROJ-205', complexity: 'critical' }), 'old')
+  const receipts = [receipt('old', 'findings', 'A'), receipt('old', 'approved', 'B')]
+  receipts[0].findings = [{ id: 'PRIVATE-A' }]
+  receipts[1].findings = [{ id: 'PRIVATE-B' }]
+  state = transitionDeliveryState(state, 'review_findings', { receipts, findings: [{ id: 'PRIVATE-A' }] })
+  assert.doesNotMatch(deliveryCheckpoint(state), /PRIVATE-[AB]/)
+  state = transitionDeliveryState(state, 'rework_complete', { commit: 'new', validation: { head: 'new', focused: 'passed', checks: [{ command: 'test', exitCode: 0 }] } })
+  assert.deepEqual(state.previousReview.receipts, receipts)
+  assert.doesNotMatch(deliveryCheckpoint(state), /PRIVATE-[AB]/)
+  assert.throws(() => transitionDeliveryState(state, 'review_approved', { receipts }), /head/)
 })
 
 test('a repeated blocker escalates once and then becomes human work', () => {

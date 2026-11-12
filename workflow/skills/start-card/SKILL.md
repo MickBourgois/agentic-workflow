@@ -55,7 +55,9 @@ fresh-context retry. A further match becomes `NEEDS_HUMAN`.
 
 ## 4. Dispatch independent review
 
-Transition to `REVIEWING`. Each fresh reviewer receives card ID, path, base
+Transition to `REVIEWING`. Before dispatch or resume, publish and reread the
+checkpoint with review receipts removed while in `REVIEWING` or `REWORKING`;
+if it cannot be sanitized, stop. Each fresh reviewer receives card ID, path, base
 SHA, current head SHA, and reviewer slot; a bounded rework may also supply the
 slot-specific prior receipt and its reviewed head.
 
@@ -72,11 +74,12 @@ confirmed blocking findings before rework. Record nonblocking suggestions withou
 forcing a cycle. Conflicting reviews need a human. Within the configured rework limit, move the card to rework, spawn a
 fresh `reworker` with confirmed findings only and require a new commit. Review
 the new head independently in each required slot. After a bounded correction,
-use the checkpoint `previousReview` to pass each slot only its own previous
+use the local state `previousReview` to pass each slot only its own previous
 receipt and old/new SHAs: inspect the correction, its callers and tests, and
 that slot’s previous findings; issue a new receipt
 for the new head. If impact, scope, base, dependencies, or risk are uncertain or
-a sensitive contract changes, review the complete card diff again. Any commit
+a sensitive contract changes, review the complete card diff again. If the local
+context is unavailable on resume, review the complete card diff again. Any commit
 invalidates prior approvals; previous receipts are context, never approval of the
 new head.
 

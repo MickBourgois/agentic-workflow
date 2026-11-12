@@ -152,7 +152,10 @@ SHAs, cycles, receipts, PR, validation, escalation count, and next action.
 
 Update an existing marked comment by ID. Never create duplicates. Mirror the
 checkpoint at `.delivery/state/<CARD>.json`; Git and live tracker/PR state outrank
-a stale local file.
+a stale local file. Previous review receipts stay in local state only, never in
+the shared checkpoint; active review and rework checkpoints omit all review
+receipts. Before dispatch or resume, publish and verify the sanitized checkpoint.
+If local context is lost, use a full fresh review.
 
 ## Resume
 

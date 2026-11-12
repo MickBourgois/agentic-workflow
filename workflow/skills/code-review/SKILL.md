@@ -16,8 +16,7 @@ Require card ID, repository/worktree, base/head SHAs, and reviewer slot (`single
 `A`, or `B`). Resolve both SHAs, require a non-empty diff, and review exactly
 `git diff <base>...<head>` plus affected callers and tests on the first review.
 For a bounded rework with a verified previous receipt on the same base, inspect
-`git diff <previous-head> <head>`, affected callers and tests, and all previous
-findings. Review the complete card diff if the base changed, the prior receipt
+`git diff <previous-head> <head>`, affected callers and tests, and all findings from that slot’s previous receipt. Review the complete card diff if the base changed, the prior receipt
 is unavailable, scope or impact is uncertain, or a sensitive contract changes.
 Always issue a new receipt for the current head.
 

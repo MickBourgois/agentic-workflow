@@ -220,7 +220,8 @@ Each manual phase still runs in a new task/context and stops at its contract.
 
 Rework records successful focused checks for the new commit before review. A
 bounded correction may receive an incremental review using only that slot’s own
-previous receipt; sensitive or uncertain impact requires the complete diff. A
+previous receipt from local state; missing local context, sensitive or uncertain
+impact requires the complete diff. A
 full check remains mandatory on the approved head before shipping.
 
 ## Agents
@@ -296,7 +297,7 @@ before release.
   receipts against the delivered commit.
 - Optional `commands.completionCheck` reconciles project evidence before `DONE`;
   a failed check leaves the delivery in `SHIPPING`.
-- Generated checkpoints preserve review receipts, validation, and escalation
+- Generated checkpoints preserve validation and escalation
   evidence; `delivery-state.mjs summary` provides a compact status view.
 - The shipper owns CI observation; domain reviews trace rules through code,
   explanations, documentation, and regression tests.
