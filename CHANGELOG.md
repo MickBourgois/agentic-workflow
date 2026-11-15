@@ -1,5 +1,10 @@
 # Changelog
 
+## 0.7.1 — 2026-11-15
+
+- Retire the `harden-project-cards` Skill and Claude command alias. Use `harden-card`.
+- Installer updates back up pristine legacy adapters and preserve modified ones as conflicts.
+
 ## 0.7.0 — 2026-11-12
 
 - Run sufficient recorded focused checks before both initial and rework reviews;

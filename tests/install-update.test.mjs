@@ -1,6 +1,6 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
-import { cp, mkdtemp, mkdir, readFile, writeFile } from 'node:fs/promises'
+import { cp, mkdtemp, mkdir, readFile, readdir, writeFile } from 'node:fs/promises'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
@@ -94,7 +94,7 @@ test('installed runtime is independent from the source checkout', async () => {
 
   const manifest = JSON.parse(await readFile(join(repo, '.agent-workflow/manifest.json'), 'utf8'))
   const version = (await readFile(join(SOURCE, 'VERSION'), 'utf8')).trim()
-  assert.equal(version, '0.7.0')
+  assert.equal(version, '0.7.1')
   assert.equal(JSON.parse(await readFile(join(SOURCE, 'package.json'), 'utf8')).version, version)
   assert.equal(JSON.parse(await readFile(join(SOURCE, 'package-lock.json'), 'utf8')).version, version)
   assert.equal(manifest.installedVersion, version)
@@ -108,7 +108,7 @@ test('installed runtime is independent from the source checkout', async () => {
   }
 })
 
-test('0.7.0 update preserves legacy runtime/checkpoints and regenerates distribution hashes', async () => {
+test('0.7.1 update preserves legacy runtime/checkpoints and regenerates distribution hashes', async () => {
   const repo = await makeRepo('agent-workflow-legacy-update-')
   run(SOURCE, 'install', repo)
   const manifestPath = join(repo, '.agent-workflow/manifest.json')
@@ -127,9 +127,28 @@ test('0.7.0 update preserves legacy runtime/checkpoints and regenerates distribu
   assert.equal(await readFile(join(repo, '.delivery/state/PROJ-701.json'), 'utf8'), state)
   assert.equal(await readFile(join(repo, '.delivery/checkpoints/PROJ-701.md'), 'utf8'), checkpoint)
   const next = JSON.parse(await readFile(manifestPath, 'utf8'))
-  assert.equal(next.installedVersion, '0.7.0')
+  assert.equal(next.installedVersion, '0.7.1')
   assert.deepEqual(next.conflicts, [])
   for (const [path, entry] of Object.entries(next.files)) {
     assert.equal(entry.managedSha256, createHash('sha256').update(await readFile(join(repo, path))).digest('hex'))
   }
+})
+
+test('update backs up obsolete pristine harden-project-cards adapters', async () => {
+  const repo = await makeRepo('agent-workflow-obsolete-alias-')
+  const oldSource = await mkdtemp(join(tmpdir(), 'agent-workflow-old-alias-'))
+  await cp(SOURCE, oldSource, { recursive: true, filter: (path) => !path.includes(`${join(SOURCE, '.git')}`) })
+  await mkdir(join(oldSource, 'workflow/skills/harden-project-cards'), { recursive: true })
+  await writeFile(join(oldSource, 'workflow/skills/harden-project-cards/SKILL.md'), '# Old alias\n')
+  await writeFile(join(oldSource, 'workflow/commands/claude/harden-project-cards.md'), '# Old command\n')
+  run(oldSource, 'install', repo)
+
+  const result = run(SOURCE, 'update', repo)
+  assert.match(result.stdout, /backed up 2, conflicts 0/)
+  for (const path of ['.agents/skills/harden-project-cards/SKILL.md', '.claude/commands/harden-project-cards.md']) {
+    await assert.rejects(readFile(join(repo, path)), { code: 'ENOENT' })
+  }
+  const [runId] = await readdir(join(repo, '.agent-workflow/backups'))
+  assert.equal(await readFile(join(repo, '.agent-workflow/backups', runId, '.agents/skills/harden-project-cards/SKILL.md'), 'utf8'), '# Old alias\n')
+  assert.equal(await readFile(join(repo, '.agent-workflow/backups', runId, '.claude/commands/harden-project-cards.md'), 'utf8'), '# Old command\n')
 })
