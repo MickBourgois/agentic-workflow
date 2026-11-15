@@ -19,7 +19,7 @@ See [website/README.md](website/README.md) for hosting and configuration.
 
 The workflow packages:
 
-- `/harden-card` and the legacy `/harden-project-cards` alias;
+- `/harden-card`;
 - `/start-card`, `/implement`, `/code-review`, `/rework`, and
   `/ship-production-change`;
 - Codex custom agents for implementation, review, rework, and shipping;
@@ -250,7 +250,7 @@ the CLI still requires an exact-pair, passing required-gate record.
 ## Skills and commands
 
 - `/harden-card`: red-team readiness, score evidence, apply critical overrides,
-  and persist the exact route. `/harden-project-cards` is a compatibility alias.
+  and persist the exact route.
 - `/rework`: reproduces and fixes only confirmed findings. It never self-approves
   or continues into shipping.
 - `/start-card`: the one-card orchestrator and resume entry point.
@@ -316,6 +316,11 @@ before release.
 Both hooks default to `null`. Updating existing projects preserves their config;
 activating project-specific checks requires their own Node entry points.
 
+## Version 0.7.1
+
+The legacy `/harden-project-cards` alias has been retired. Use `/harden-card`.
+Updates preserve pristine legacy files in `.agent-workflow/backups/`.
+
 ## Version 0.7.0
 
 Focused checks → commit → independent code reviews → bounded corrections/reviews
@@ -331,7 +336,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.7.0`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.7.1`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations
