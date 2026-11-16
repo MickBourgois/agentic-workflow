@@ -9,6 +9,8 @@ import { createDeliveryState, transitionDeliveryState, writeDeliveryState, deliv
 const focused = (head) => ({ head, focused: 'passed', checks: [{ command: 'node --check app.mjs', exitCode: 0 }] })
 const receipt = (head, slot = 'single', status = 'approved') => ({ reviewed_head: head, reviewer_slot: slot, status, scope: 'code_and_focused_checks' })
 const gate = (head = 'head', base = 'base') => ({ kind: 'required_gate', result: 'passed', head, base, profile: 'full', reason: 'default full policy', checks: [{ command: 'node verify.mjs run', exitCode: 0 }], receipt: '.delivery/receipt.json' })
+const finding = (priority = 'P2') => ({ id: 'FIX', priority, file: 'app.mjs', line: 1,
+  requirement: 'Reject invalid input', evidence: 'An empty input is accepted', required_change: 'Reject empty input and add a regression test' })
 
 function reviewing(complexity = 'standard') {
   let state = createDeliveryState({ card: 'PROJ-701', complexity, baseSha: 'base' })
@@ -34,7 +36,7 @@ test('initial review needs recorded successful focused checks, never a full gate
 test('findings and rework return to independent review without a gate; approvals precede validation', () => {
   let state = reviewing('critical')
   state = transitionDeliveryState(state, 'review_findings', {
-    receipts: [receipt('head', 'A', 'findings'), receipt('head', 'B')], findings: [{ id: 'FIX' }],
+    receipts: [{ ...receipt('head', 'A', 'findings'), findings: [finding()] }, receipt('head', 'B')], findings: [finding()],
   })
   state = transitionDeliveryState(state, 'rework_complete', { commit: 'corrected', validation: focused('corrected') })
   assert.equal(state.state, 'REVIEWING')
@@ -51,6 +53,52 @@ test('findings and rework return to independent review without a gate; approvals
   const approved = transitionDeliveryState(state, 'review_approved', { validation: gate('corrected') })
   assert.equal(approved.state, 'APPROVED')
   assert.deepEqual(approved.focusedValidation, focused('corrected'))
+})
+
+test('optional suggestions allow approval without consuming a rework cycle', () => {
+  const suggestions = [{ priority: 'P3', file: 'app.mjs', line: 1, suggestion: 'Consider a clearer local name' }]
+  const receipts = [{ ...receipt('head'), findings: [], suggestions }]
+  const state = transitionDeliveryState(reviewing(), 'reviews_approved', { receipts })
+  assert.equal(state.state, 'VALIDATING')
+  assert.equal(state.reworkCycles, 0)
+  assert.deepEqual(state.reviewReceipts[0].suggestions, suggestions)
+  assert.equal(transitionDeliveryState(state, 'review_approved', { validation: gate() }).state, 'APPROVED')
+  assert.throws(() => transitionDeliveryState(reviewing(), 'review_findings', { receipts, findings: suggestions }))
+})
+
+test('reviews cannot approve blockers or use P3, incomplete or unconfirmed findings to force rework', () => {
+  assert.throws(() => transitionDeliveryState(reviewing(), 'reviews_approved', {
+    receipts: [{ ...receipt('head'), findings: [finding()] }],
+  }), /approved review cannot contain blocking findings/)
+  for (const invalid of [finding('P3'), finding('unknown'), { ...finding(), evidence: '' },
+    { ...finding(), requirement: '' }, { ...finding(), required_change: '' }, { ...finding(), line: 0 }]) {
+    assert.throws(() => transitionDeliveryState(reviewing(), 'review_findings', {
+      receipts: [{ ...receipt('head', 'single', 'findings'), findings: [invalid] }], findings: [invalid],
+    }))
+  }
+  assert.throws(() => transitionDeliveryState(reviewing(), 'review_findings', {
+    receipts: [receipt('head', 'single', 'findings')], findings: [finding()],
+  }), /blocking findings required/)
+  assert.throws(() => transitionDeliveryState(reviewing(), 'reviews_approved', {
+    receipts: [{ ...receipt('head'), suggestions: [{ priority: 'P1', suggestion: 'Fix the security defect' }] }],
+  }), /suggestions must be nonblocking/)
+})
+
+test('P0-P2 defects block; critical rework includes every independent blocker and deduplicates overlaps', () => {
+  for (const priority of ['P0', 'P1', 'P2']) {
+    const defect = finding(priority)
+    const receipts = [{ ...receipt('head', 'single', 'findings'), findings: [defect] }]
+    assert.equal(transitionDeliveryState(reviewing(), 'review_findings', { receipts, findings: [defect] }).state, 'REWORKING')
+  }
+  const first = finding(), second = { ...finding('P1'), id: 'SECOND', file: 'other.mjs' }
+  const receipts = [
+    { ...receipt('head', 'A', 'findings'), findings: [first] },
+    { ...receipt('head', 'B', 'findings'), findings: [first, second] },
+  ]
+  for (const findings of [[first], [first, first], [first, { ...second, file: 'unreviewed.mjs' }]]) {
+    assert.throws(() => transitionDeliveryState(reviewing('critical'), 'review_findings', { receipts, findings }), /cover all reviewed blockers/)
+  }
+  assert.equal(transitionDeliveryState(reviewing('critical'), 'review_findings', { receipts, findings: [first, second] }).state, 'REWORKING')
 })
 
 test('missing, failed, partial and wrong-pair gates block delivery approval and shipping', () => {

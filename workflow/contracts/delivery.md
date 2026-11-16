@@ -24,6 +24,10 @@ is two rework cycles and one model escalation; project config may lower or raise
 those numeric limits. A retry requires changed evidence. Repeating an unchanged
 operation is not a recovery strategy.
 
+Two reworks allow at most three review rounds. Critical slots A/B run concurrently
+within each round; they are not separate rework cycles. Preserve counters across
+resume. Reaching the limit requires human arbitration, not automatic acceptance.
+
 ## Complexity classification
 
 Hardening assigns exactly one level. Apply critical overrides first, then score
@@ -116,6 +120,25 @@ and coverage. It cannot infer every project's required commands from a diff.
 
 ### Review
 
+#### Blocking policy
+
+Approve when the accepted scope works, required checks pass and no demonstrated
+defect remains. An empty review is valid; findings have no quota.
+
+- `findings` contains only blocking P0-P2 defects: incorrect behavior, a failed
+  acceptance criterion or required check, a credible security/data-loss risk, or
+  a violated applicable project rule. Cite the scenario or rule and its impact.
+- `suggestions` contains optional P2-P3 advice: polish, preferences, alternative
+  designs and additional coverage without a demonstrated gap. P3 never triggers
+  rework. P0/P1 cannot be downgraded to suggestions.
+- Priority alone is not evidence. A P2 defect can block; an architectural
+  preference cannot become a blocker by being labeled P2. Missing product choices
+  need human arbitration instead of silently expanding the accepted scope.
+
+Use this same policy during initial review, rework and PR-thread triage. Explicit
+project rules and branch protection still apply. Record suggestions in the PR or
+handoff without creating tickets automatically or requiring a correction commit.
+
 Input: card ID, repository/worktree, base SHA, head SHA, reviewer slot. Never pass
 implementation transcripts, rationale, conclusions, or another slot's review.
 For a bounded rework, the same slot may receive its own prior receipt and head;
@@ -129,13 +152,23 @@ reviewer_slot: single | A | B
 scope: code_and_focused_checks
 findings:
   - id: RVW-001
-    priority: P0 | P1 | P2 | P3
+    priority: P0 | P1 | P2
     file: <path>
     line: <line>
     requirement: <precise requirement reference>
     evidence: <observable evidence>
     required_change: <bounded correction or test>
+suggestions:
+  - priority: P2 | P3
+    file: <path-if-relevant>
+    line: <line-if-relevant>
+    suggestion: <optional improvement>
 ```
+
+Use `status: approved` with absent or empty `findings`, even when suggestions
+remain. `status: findings` requires at least one evidenced blocker. The CLI
+checks these shapes, priorities and complete deduplicated blocker coverage; the
+reviewer and orchestrator remain responsible for confirming the actual defect.
 
 Critical reviewers run independently. The orchestrator unions duplicates by
 `(file, line, requirement)` and sends conflicting opinions to a human.
@@ -247,6 +280,16 @@ logs and history stay in files and are read only to investigate a specific issue
 
 Backlog traversal is an outer runner. It starts a new top-level Codex process per
 card and never uses `codex exec resume`.
+
+### Compatibility with deliveries started before 0.8.0
+
+State format remains 2. Existing approved receipts with absent or empty findings
+remain compatible; update never rewrites runtime/checkpoints or resets counters.
+Preserve historical receipts. Before resuming pending old findings, reconfirm each
+against the blocking policy and recover its real evidence. P3-only, incomplete or
+ambiguous pending blockers require human reconciliation, not silent removal or
+synthetic approval. New review receipts and rework events must follow the current
+policy. Format 1 delivery recovery still follows the rules below.
 
 ### Compatibility with deliveries started before 0.7.0
 

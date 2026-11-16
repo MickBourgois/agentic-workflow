@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.8.0 — 2026-11-16
+
+- Separate evidenced P0-P2 blockers from optional P2-P3 suggestions across review,
+  orchestration, rework and PR-thread triage. Approval with suggestions is valid.
+- Reject contradictory approvals, P3 blockers, incomplete findings and omission
+  of independent blockers from the deduplicated rework handoff.
+- Preserve settled scope/design decisions on re-review; newly discovered concrete
+  defects still block. Keep two reworks by default and independent critical slots.
+- Use six core hardening sections with conditional risk detail; justify mandatory
+  additions and keep optional ideas outside acceptance criteria.
+- Run relevant lint/types before review. Source CI cancels superseded runs and
+  avoids duplicate feature-branch push/PR runs. Consumer final gates are unchanged.
+- Keep state format 2 and installer ownership/checksum rules. Existing runtime
+  evidence is preserved; unresolved legacy findings require reconciliation.
+
 ## 0.7.1 — 2026-11-15
 
 - Retire the `harden-project-cards` Skill and Claude command alias. Use `harden-card`.

@@ -17,9 +17,11 @@ security decisions return `needs_human` without edits.
 
 1. Confirm current head equals the reviewed head.
 2. Reproduce or verify each finding.
-3. Make the smallest correction for confirmed findings only.
+3. Apply the delivery contract's blocking policy and make the smallest correction
+   for confirmed blockers only. Preserve accepted scope/design decisions;
+   optional suggestions do not require edits or consume a cycle.
 4. Add or adjust proof for each correction.
-5. Run affected proof and invalidated card checks, including a build or early
+5. Run affected proof, relevant lint/type checks and invalidated card checks, including a build or early
    full gate when project/card instructions require it. Record commands and results;
    unavailable or failing required focused checks block review. Do not call this
    a full gate or reuse a stale binding.

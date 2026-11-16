@@ -94,6 +94,16 @@ function requiredReviewSlots(state) {
   return state.route.reviewers.length === 2 ? ['A', 'B'] : ['single']
 }
 
+function validateBlockingFindings(findings) {
+  assert(Array.isArray(findings) && findings.length > 0, 'blocking findings required')
+  for (const finding of findings) {
+    assert(['P0', 'P1', 'P2'].includes(finding.priority), 'blocking finding priority must be P0-P2; P3 belongs in suggestions')
+    assert(['id', 'file', 'requirement', 'evidence', 'required_change'].every((key) =>
+      typeof finding[key] === 'string' && finding[key].trim()), 'blocking finding requires a requirement, evidence and bounded correction')
+    assert(Number.isInteger(finding.line) && finding.line > 0, 'blocking finding requires a positive line')
+  }
+}
+
 function validateReviewReceipts(state, receipts, legacy = false) {
   assert(Array.isArray(receipts), 'review receipts must be an array')
   assert(receipts.length === state.route.reviewers.length,
@@ -102,6 +112,14 @@ function validateReviewReceipts(state, receipts, legacy = false) {
     assert(receipt.reviewed_head === state.currentHead, 'review receipt head does not match current head')
     assert(['approved', 'findings'].includes(receipt.status), 'invalid review receipt status')
     assert(legacy || receipt.scope === 'code_and_focused_checks', 'review scope must be code_and_focused_checks')
+    if (!legacy) {
+      if (receipt.status === 'findings') validateBlockingFindings(receipt.findings)
+      else assert(receipt.findings === undefined || (Array.isArray(receipt.findings) && receipt.findings.length === 0),
+        'approved review cannot contain blocking findings')
+      assert(receipt.suggestions === undefined || (Array.isArray(receipt.suggestions) && receipt.suggestions.every((suggestion) =>
+        ['P2', 'P3'].includes(suggestion.priority) && typeof suggestion.suggestion === 'string' && suggestion.suggestion.trim())),
+      'suggestions must be nonblocking P2-P3 advice')
+    }
   }
   const actual = receipts.map((receipt) => receipt.reviewer_slot).sort()
   const expected = requiredReviewSlots(state).sort()
@@ -185,12 +203,17 @@ export function transitionDeliveryState(current, event, payload = {}) {
       state.validation = payload.validation
       state.state = 'APPROVED'
       break
-    case 'review_findings':
+    case 'review_findings': {
       requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
       validateFocused(state.validation, state.currentHead)
       assert(payload.receipts.some((receipt) => receipt.status === 'findings'), 'findings receipt required')
-      assert(Array.isArray(payload.findings) && payload.findings.length > 0, 'actionable findings required')
+      validateBlockingFindings(payload.findings)
+      const findingKey = (finding) => JSON.stringify([finding.file, finding.line, finding.requirement])
+      const expectedFindings = new Set(payload.receipts.flatMap((receipt) => receipt.findings ?? []).map(findingKey))
+      const actualFindings = new Set(payload.findings.map(findingKey))
+      assert(actualFindings.size === payload.findings.length && actualFindings.size === expectedFindings.size
+        && [...actualFindings].every((key) => expectedFindings.has(key)), 'confirmed findings must cover all reviewed blockers exactly once')
       state.reviewReceipts = payload.receipts
       state.findings = payload.findings
       if (state.reworkCycles >= maxReworkCycles) {
@@ -200,6 +223,7 @@ export function transitionDeliveryState(current, event, payload = {}) {
         state.state = 'REWORKING'
       }
       break
+    }
     case 'rework_complete':
       requireState(state, 'REWORKING', event)
       assert(payload.commit, 'rework_complete requires commit')

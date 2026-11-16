@@ -316,6 +316,28 @@ before release.
 Both hooks default to `null`. Updating existing projects preserves their config;
 activating project-specific checks requires their own Node entry points.
 
+## Version 0.8.0
+
+Reviews separate evidenced blocking defects (`findings`, P0-P2) from optional
+advice (`suggestions`, P2-P3). A review can approve with suggestions or no remarks.
+The same blocking policy applies to rework and PR threads. The state machine
+rejects contradictory approvals, P3 blockers, incomplete evidence and omitted
+independent blockers. Re-review preserves settled scope/design choices while
+checking corrections and real regressions; newly discovered defects still block.
+
+Hardening uses six core card sections and adds risk-specific detail only when
+relevant. Mandatory additions require an accepted requirement, applicable project
+rule or credible failure mode; optional ideas do not expand acceptance criteria.
+The default two-rework limit, critical dual reviews, full final gate and project
+protections remain. Source CI cancels obsolete runs and avoids duplicate branch
+push/PR checks. This release does not replace consumer local gates with GitHub CI
+or promise measured delivery-time savings.
+
+Local state remains format 2. Existing approved receipts without findings stay
+valid; historical state/checkpoints are never rewritten by update. Before resuming
+pending old findings, confirm their evidence against the blocking policy; ambiguous
+or P3-only legacy blockers require human reconciliation instead of silent removal.
+
 ## Version 0.7.1
 
 The legacy `/harden-project-cards` alias has been retired. Use `/harden-card`.
@@ -336,7 +358,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.7.1`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.8.0`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations
