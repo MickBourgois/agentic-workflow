@@ -20,6 +20,12 @@ For a bounded rework with a verified previous receipt on the same base, inspect
 is unavailable, scope or impact is uncertain, or a sensitive contract changes.
 Always issue a new receipt for the current head.
 
+On re-review, verify prior blockers, the correction and its induced regressions.
+Preserve accepted scope and settled design choices. A newly discovered concrete
+defect still blocks under the delivery contract's blocking policy, including on
+a required full-diff re-review; explain its scenario and impact. An alternative
+design or extra coverage without a demonstrated defect stays optional.
+
 For both initial and rework reviews, require recorded successful focused checks
 for this exact head. Inspect actual commands, results and their coverage of the
 change, acceptance criteria and project/card requirements. Missing, unavailable,
@@ -44,8 +50,10 @@ tests. Resolve contradictions across those surfaces; a correct numerical result
 alone does not establish a correct explanation. Read project review references
 named by its instructions. This is a judgement review, not a style checklist.
 
-Findings require concrete evidence, tight file/line, P0-P3, and a bounded required
-change or test. Do not invent a quota.
+Apply the delivery contract's blocking policy. Return only evidenced P0-P2
+blockers in `findings`, with tight file/line and a bounded correction or test.
+Put optional P2-P3 advice in `suggestions`. Approve when no blocker remains,
+including with suggestions or no remarks. Do not invent a quota.
 
 Return the exact-head review handoff from the delivery contract, echo the reviewer
 slot, and stop. Never edit, commit, rework, ship, or select another card.

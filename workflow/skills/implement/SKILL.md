@@ -18,10 +18,12 @@ hardened and in the configured implementing state.
 1. Confirm worktree, branch, base, and clean starting state. Preserve unrelated
    user work.
 2. Map acceptance criteria to tests and the smallest changes.
+   Preserve accepted scope/design decisions; optional card suggestions remain
+   optional. Read the same applicable project conventions as the reviewer.
 3. Use TDD at declared seams where practical; prove required regression tests fail
    before the fix.
 4. Implement only the card.
-5. Run focused proof and all checks required before commit/review by project
+5. Run focused proof, available relevant lint/type checks and all checks required before commit/review by project
    instructions or the card, including a build when required. An unavailable or
    failing required check blocks review. The workflow defers `commands.fullCheck`
    until all reviews approve, unless stricter project/card instructions require

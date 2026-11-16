@@ -29,10 +29,16 @@ ticket-creation workflow.
 
 ## Readiness gate
 
-Apply the rubric. A blocking product, architecture, security, or operator choice
+Apply relevant rubric branches to the smallest observable success. Each mandatory
+addition must cite an accepted requirement, applicable project rule or credible
+failure mode in the changed scope. Keep polish, alternative designs, speculative
+future needs and unrelated cleanup optional, outside acceptance criteria.
+
+A blocking product, architecture, security, or operator choice
 sets the card to the configured needs-info state and blocks hardening. Split work
-that cannot fit one reviewable PR. Tracker relations and prose describe the same
-blockers.
+that cannot fit one coherent reviewable PR; keep behavior and its proof together.
+Avoid splitting merely by file count or creating extra gates for dependent
+fragments. Tracker relations and prose describe the same blockers.
 
 ## Classification and route
 
@@ -67,9 +73,10 @@ Questions:
 - <blocking questions only>
 ```
 
-After approval, bring the description to the card template. Preserve approved
-functional wording. Routing metadata belongs in the routing comment, not the
-description.
+After approval, use the card template's core sections and only applicable risk
+sections. Preserve approved functional wording and accepted decisions. An
+optional suggestion becomes mandatory only after explicit scope approval.
+Routing metadata belongs in the routing comment, not the description.
 
 ## Persist
 

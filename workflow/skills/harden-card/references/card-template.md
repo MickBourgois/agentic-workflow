@@ -1,7 +1,7 @@
 # Hardened Card Template
 
-Every section is present. Use `Not applicable: <reason>` instead of an empty
-section.
+Use these core sections. Keep detail proportional to the changed behavior and
+reuse applicable project rules by reference instead of copying their checklists.
 
 ```markdown
 ## Context
@@ -20,27 +20,16 @@ section.
 <Observable and verifiable statements.>
 
 ## Validation
-<Exact focused commands and the project full-check command.>
-
-## Browser / app validation
-<Setup, actions, functional/visual result, console/network checks, pass/fail;
-or `Not applicable: <reason>`.>
-
-## Tests
-<Named tests to add/update, or the strongest practical alternative.>
-
-## Regression proof
-<Test or smoke path; or `Not added: <reason>` and alternative proof.>
-
-## Risks / dependencies
-<Native tracker relations, migration order, rollout, provider constraints.>
-
-## Agent guardrails
-<Explicit shortcuts the executor must avoid, with reasons.>
-
-## Human validation required
-<Yes/no and the exact evidence an agent cannot legitimately obtain.>
+<Exact focused commands, relevant lint/types, named regression proof or practical
+alternative, and the required final gate. For UI changes, include concrete
+browser actions and expected results.>
 ```
+
+Add `Risks / dependencies`, `Agent guardrails` or `Human validation required`
+only when a concrete risk, dependency, unsafe shortcut or human-only proof applies.
+State migration/rollout order, partial failures, identity/access boundaries and
+provider limits when they change. Omit irrelevant sections instead of adding
+`Not applicable` boilerplate. Optional ideas stay outside acceptance criteria.
 
 Provider work uses fixtures, sandbox, or documented manual proof. CI does not
 depend on live production providers. Keep complexity and routing in the marked

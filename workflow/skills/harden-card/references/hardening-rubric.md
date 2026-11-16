@@ -11,6 +11,10 @@ expansion checklist.
   vague validation, missing guardrail.
 - **Optional:** polish and additional low-risk proof.
 
+Severity follows the concrete impact on this card, not the number of checklist
+items covered. Only justified must-fix gaps prevent readiness. Offer should-fix
+improvements as optional unless their impact establishes a real blocker.
+
 ## Universal
 
 - What problem is solved, and what is the smallest observable success?

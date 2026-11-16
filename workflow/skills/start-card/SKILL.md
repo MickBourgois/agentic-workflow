@@ -97,10 +97,13 @@ unexpected commits/base changes with a human rather than editing frozen SHAs or
 reusing old receipts. Resume VALIDATING by verifying its local exact-head
 approvals and running/verifying only the missing gate, never inventing receipts
 from the sanitized shared checkpoint.
-Otherwise deduplicate findings by `(file, line, requirement)`; confirm each
-finding with an observable scenario or explicit requirement and collect all
-confirmed blocking findings before rework. Record nonblocking suggestions without
-forcing a cycle. Conflicting reviews need a human. Within the configured rework limit, move the card to rework, spawn a
+Otherwise apply the delivery contract's blocking policy. Confirm each defect
+with a scenario or applicable requirement and deduplicate by `(file, line,
+requirement)`. The `review_findings` payload must cover every reviewed blocker
+exactly once; reconcile unsupported findings with the reviewer or a human rather
+than silently dropping them. Record optional `suggestions` without forcing a
+cycle or creating tickets automatically. Conflicting reviews need a human.
+Within the configured rework limit, move the card to rework, spawn a
 fresh `reworker` with confirmed findings only and require a new commit. Review
 the new head independently in each required slot. After a bounded correction,
 use the local state `previousReview` to pass each slot only its own previous
@@ -111,6 +114,11 @@ a sensitive contract changes, review the complete card diff again. If the local
 context is unavailable on resume, review the complete card diff again. Any commit
 invalidates prior approvals; previous receipts are context, never approval of the
 new head.
+
+Keep settled scope/design decisions on re-review. New blockers require a concrete
+defect under the same policy, not a new preference. Preserve the rework counter
+on resume; after the configured limit return `NEEDS_HUMAN` with remaining
+blockers and decisions required.
 
 ## 5. Dispatch shipping
 
