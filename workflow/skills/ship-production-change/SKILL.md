@@ -55,6 +55,14 @@ safe-smoke proof before setting the card to done.
 
 ## Cleanup
 
+Before removing the worktree, copy the complete `.delivery/evidence/<CARD>/`
+directory into a durable entry-repository `.delivery/archives/<CARD>/evidence/`,
+preserving every bundle directory/name. Include focused, final-gate and all
+registered supplementary artifacts, plus any earlier rework/failure captures.
+Verify copied receipts/hashes from the archive; missing or changed files block
+cleanup. Do this even without project validation/completion hooks. Keep private
+raw logs local; only sanitized checkpoints and objective references are shared.
+
 When validation proof is configured, archive the verified binding and its raw
 receipt with their recorded hashes before removing the worktree; pass their
 archive paths to the project completion checker.
@@ -64,6 +72,9 @@ After confirmed merge only, remove this card's clean inactive worktree with
 dirty or active worktrees.
 
 Update the checkpoint to `DONE` with merge, deployment, and cleanup evidence.
+Supply `evidenceArchive` as the absolute copied evidence directory in `shipped`.
+New evidence-required states verify its focused/gate/artifact bundles against
+their originally recorded hashes before DONE, including after worktree removal.
 When `commands.completionCheck` is configured, supply its project evidence to
 the state machine's `shipped` event. The command receives state/payload/config on
 stdin and must return a passing proof for the exact head/base/merge. Let the state

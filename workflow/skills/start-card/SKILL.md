@@ -32,12 +32,19 @@ One card owns one branch, worktree, and PR.
 - Fetch the configured remote/base and require a clean, uncontaminated base.
 - Create/resume under configured `worktree.root` using the configured branch
   pattern. Resume durable state instead of duplicating it.
+- Stop immediately on preparation failure. Do not initialize local/tracker state,
+  change tracker status, or dispatch a phase after a failed Git/install/copy step.
+  Await each step or use a fail-fast shell; never append state commands to an
+  unguarded shell block. Verify the existing worktree root, owner repository,
+  branch, clean contents and frozen base before proceeding.
 - Run the detected/configured install command when present.
 - Copy only file names listed in `environment.copyFiles`, without printing
   contents. Surface configured safety warnings before mutable smokes.
-- Move only this card to the configured implementing status before the first edit.
-- Initialize/update state with `.agent-workflow/bin/delivery-state.mjs` and the
-  marked tracker checkpoint.
+- After all preparation succeeds, use `delivery-state.mjs init` with explicit
+  worktree, branch and full base SHA. Init refuses an existing state/checkpoint;
+  resume instead. Only after successful init may the workflow transition to
+  IMPLEMENTING, update this card's tracker status and publish its checkpoint.
+  `start_implementation` rechecks the prepared worktree before persisting state.
 
 ## 3. Dispatch implementation
 
@@ -49,6 +56,10 @@ When no durable implementation commit exists:
    implementation model/reasoning. Require the repo-local `/implement` skill.
 4. Resolve its commit and persist objective validation. Do not forward its notes
    to reviewers.
+
+Use the raw evidence protocol in the delivery contract. New deliveries require
+an actual clean committed-head `focused` capture per recorded check; a narrative,
+precommit fingerprint or renamed receipt cannot satisfy `review-ready`.
 
 Two matching failure fingerprints trigger the one bounded escalation and one
 fresh-context retry. A further match becomes `NEEDS_HUMAN`.
@@ -91,6 +102,9 @@ returned binding path in `review_approved` payload `validation.binding`. The
 `review_approved` event verifies that proof before transitioning to `APPROVED`;
 any failure blocks shipping. Preserve the verified binding and receipt for the
 final archive.
+Run the gate through `delivery-evidence.mjs run --kind gate` and include its
+raw bundle receipt in each check's `receipt`, using the returned `command`.
+Retain the separate project policy receipt/binding when configured.
 On a gate failure stay in VALIDATING; do not dispatch shipping. Any code change
 requires fresh focused checks and all required reviews on the new head. Reconcile
 unexpected commits/base changes with a human rather than editing frozen SHAs or

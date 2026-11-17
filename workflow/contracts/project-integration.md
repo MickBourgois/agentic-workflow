@@ -58,7 +58,9 @@ Optional project Node entry points in `commands`:
 
 Without `validationProof`, the same final gate record is mandatory, but its
 authenticity, freshness and policy coverage are enforced by the project process,
-not independently verified by the CLI. Missing `commands.fullCheck` is not a pass:
+not independently certified by the CLI. New evidence-required states do verify
+raw capture identity and checksums independently of the optional project hook;
+that does not certify command coverage or authenticity. Missing `commands.fullCheck` is not a pass:
 the phase must identify and execute the project's required validation or stop.
 Project/card instructions may require additional checks or a full gate before
 commit/review; this workflow never relaxes those explicit requirements.

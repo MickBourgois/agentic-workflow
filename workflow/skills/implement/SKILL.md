@@ -22,6 +22,8 @@ hardened and in the configured implementing state.
    optional. Read the same applicable project conventions as the reviewer.
 3. Use TDD at declared seams where practical; prove required regression tests fail
    before the fix.
+   Capture this execution as `regression` evidence, including the expected
+   nonzero exit, before changing the implementation. Keep its raw output.
 4. Implement only the card.
 5. Run focused proof, available relevant lint/type checks and all checks required before commit/review by project
    instructions or the card, including a build when required. An unavailable or
@@ -37,6 +39,15 @@ hardened and in the configured implementing state.
    checks actually passed on these unchanged contents. Transition to `REVIEWING`.
    Focused validation is not a required-gate receipt. Binding the final gate is
    the orchestrator's responsibility after reviews; never rebind an older receipt.
+
+After committing, run the required focused checks on the clean exact head through
+`delivery-evidence.mjs run --kind focused` (delivery contract). Record the returned
+`command`, `exitCode` and `receipt` per check. Precommit requirements still run
+before commit; capture them as `precommit`, then list those receipts and all
+required red/browser/comparison bundles in `validation.artifacts`. Preserve the
+baseline comparison script, both outputs, screenshots and console exports when
+they are required proof. No temporary comparison test may be removed before its
+source and raw results are collected. Missing mandatory evidence blocks handoff.
 
 Return the implementation handoff from the delivery contract and stop. Do not
 review, rework, push/merge a PR, or select another card.

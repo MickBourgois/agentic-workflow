@@ -106,6 +106,7 @@ validation:
   checks:
     - command: <actual-required-focused-command>
       exitCode: 0
+      receipt: <raw-focused-bundle/receipt.json>
 notes:
   migrations: none
   known_limitations: []
@@ -201,6 +202,7 @@ reason: <policy-selection-reason>
 checks:
   - command: <actual-required-gate-command>
     exitCode: 0
+    receipt: <raw-gate-bundle/receipt.json>
 receipt: <auditable-receipt-path>
 binding: <binding-path-if-validationProof-is-configured>
 ```
@@ -237,6 +239,67 @@ repository rules allow it, verify deployment, update the tracker, and clean the
 worktree. It never edits application code or manufactures review evidence.
 
 ## Durable persistence
+
+### Prepared isolation and raw evidence
+
+Prepare the worktree, install and allowed environment files sequentially and
+fail fast. Before local init, tracker transitions or phase dispatch, confirm a
+linked worktree at its root, owned by the same Git repository, on the intended
+branch and clean frozen base. CLI init validates this, refuses existing state or
+checkpoint files and sets `policy.evidenceRequired: true`; start_implementation
+rechecks preparation. Never reset counters through init. Existing states retain
+their recorded policy and historical evidence; do not inject fabricated bundles.
+
+Use the installed helper to capture actual commands without shell interpolation:
+
+```bash
+node .agent-workflow/bin/delivery-evidence.mjs run \
+  --repo <worktree> --card PROJ-123 --base <full-base-sha> --head <full-head-sha> \
+  --kind focused -- npm test
+```
+
+Use `regression` for the expected red execution, `precommit` for requirements
+run before commit, `focused` after commit and `gate` after code approval. The
+helper preserves stdout/stderr and exit status in unique ignored private bundles
+under `.delivery/evidence/<CARD>/`, with timestamps, actual Git identity, dirty
+status, source/index fingerprint and SHA-256 file hashes. Source mutations during
+capture invalidate the result. A dirty precommit/red run can be retained but
+cannot establish passing focused/gate evidence for a commit. Run focused checks
+again on the committed clean head, without amending the commit afterward.
+
+Each validation check carries the helper's returned `command`, `exitCode` and
+`receipt`. New evidence-required states verify their card/base/head/kind, clean
+snapshot and raw files at implementation/rework handoff, review-ready, approval
+and shipping. Missing, stale or altered files block advancement. Project gate
+policy, coverage and authenticity remain the phase/reviewer's responsibility;
+the helper is a capture/checksum mechanism, not an independent test oracle.
+
+For tool-produced screenshots, console exports, baseline/current render files
+and temporary comparison sources, capture explicit files before deleting them:
+
+```bash
+node .agent-workflow/bin/delivery-evidence.mjs collect \
+  --repo <worktree> --card PROJ-123 --base <full-base-sha> --head <full-head-sha> \
+  --kind browser -- <screenshot> <console-export> <fixture-source>
+```
+
+Collect returns `captured`, never a test pass. A byte-equality claim also needs
+the comparison command's raw execution and both compared files; saving only the
+final HTML is insufficient. List every supplementary bundle (including red and
+precommit runs) as `{receipt: <path>}` in `validation.artifacts`. The CLI records
+their hashes for later archive verification. Reviewers inspect objective proof
+without reading implementation narratives. Read-only reviewers request any new
+logged command execution from the orchestrator when their host cannot preserve
+raw output; they retain independent judgement.
+
+Before cleanup, shipping copies the entire evidence directory to an archive
+outside the worktree. Verify copied files with `delivery-evidence.mjs verify
+--repo <entry-repo> --card <CARD> --base <base> --head <head> --kind <kind>
+--receipt <archived-receipt>`. `shipped` requires `evidenceArchive` on new states
+and verifies registered focused, gate and supplementary bundles against stored
+hashes, even after worktree removal. Artifacts stay local and ignored. Use fixture
+data; never pass secrets in command arguments or capture credentials/private
+production payloads. Inspect/redact material before sharing it externally.
 
 Hardening owns one tracker comment marked `<!-- delivery-routing:v1 -->`. It holds
 the classification evidence and exact route. Delivery owns one idempotent comment

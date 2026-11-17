@@ -74,3 +74,17 @@ project-owned Node entry points. The former binds/verifies immutable required-ga
 receipts. The latter receives state, shipping evidence and resolved config on
 stdin; failure blocks `DONE`. See the project integration contract for the
 protocol. These defaults are null, so existing consumers retain their behavior.
+
+
+## Delivery evidence
+
+New CLI-initialized deliveries record `policy.evidenceRequired` in runtime state.
+This is not a project configuration switch. The installed
+`delivery-evidence.mjs` helper captures raw command logs and explicit artifacts;
+see the [protocol](../workflow/contracts/delivery.md#prepared-isolation-and-raw-evidence).
+Every focused/gate check supplies its returned command, exitCode and receipt.
+Supplementary red, precommit and browser/comparison receipts belong in
+`validation.artifacts`. Shipping supplies the durable `evidenceArchive` directory
+before DONE. Existing deliveries retain their old policy; updates never rewrite
+runtime or manufacture logs. Project-specific validation/completion hooks still
+own coverage, freshness and deployment requirements.

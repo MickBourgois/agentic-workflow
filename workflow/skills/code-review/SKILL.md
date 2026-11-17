@@ -33,6 +33,11 @@ failing or insufficient required checks block approval, including any build or
 early full gate explicitly mandated by stricter instructions. The workflow does
 not otherwise require `commands.fullCheck` or a gate binding before review.
 Never use a partial or stale gate receipt as evidence of successful validation.
+For new evidence-required deliveries, inspect the raw focused bundles and their
+hashes using `delivery-evidence.mjs verify`. Review remains read-only: if another
+check is needed and the sandbox cannot retain its raw output, request that exact
+command from the orchestrator, then inspect the resulting clean-head capture.
+Do not substitute a tool-session identifier or a prose summary for durable logs.
 Return `scope: code_and_focused_checks`: this approves code and focused evidence,
 not the final gate or delivery. The orchestrator must obtain and verify the
 required gate on this exact base/head after all slots approve.
