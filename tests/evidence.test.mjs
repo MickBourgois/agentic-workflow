@@ -88,7 +88,11 @@ test('new deliveries require raw exact-head receipts through review, approval an
   const focused = { head: f.head, focused: 'passed', checks: [{ command: 'tests passed in prose', exitCode: 0 }] }
   await event('implementation_complete', { commit: f.head, validation: focused }, 1)
   const capture = f.run('run', ['--kind', 'focused', '--', process.execPath, '-e', 'console.log("focused")'])
+  const screenshot = join(f.root, '.delivery/screenshot.html')
+  await writeFile(screenshot, '<main>browser fixture</main>')
+  const browser = f.run('collect', ['--kind', 'browser', '--', screenshot])
   focused.checks = [{ command: capture.command, exitCode: 0, receipt: capture.receipt }]
+  focused.artifacts = [{ receipt: browser.receipt }]
   await event('implementation_complete', { commit: f.head, validation: focused })
   await event('reviews_approved', { receipts: [{ reviewed_head: f.head, reviewer_slot: 'single', status: 'approved', scope: 'code_and_focused_checks' }] })
   const gateCapture = f.run('run', ['--kind', 'gate', '--', process.execPath, '-e', 'console.log("full gate")'])
@@ -104,6 +108,9 @@ test('new deliveries require raw exact-head receipts through review, approval an
   await cp(join(f.root, '.delivery/evidence/PROJ-802'), unsafeArchive, { recursive: true })
   await event('shipped', { ...shipping, evidenceArchive: unsafeArchive }, 1)
   const archive = await mkdtemp(join(tmpdir(), 'workflow-done-archive-'))
+  await cp(join(f.root, '.delivery/evidence/PROJ-802'), archive, { recursive: true })
+  await writeFile(join(archive, browser.directory.split('/').at(-1), 'artifacts/0-screenshot.html'), 'altered artifact')
+  await event('shipped', { ...shipping, evidenceArchive: archive }, 1)
   await cp(join(f.root, '.delivery/evidence/PROJ-802'), archive, { recursive: true })
   await writeFile(join(archive, gateCapture.directory.split('/').at(-1), 'stdout.log'), 'tampered')
   await event('shipped', { ...shipping, evidenceArchive: archive }, 1)
