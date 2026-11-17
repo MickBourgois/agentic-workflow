@@ -36,6 +36,7 @@ test('install is complete, idempotent, and preserves user-owned files', async ()
     '.codex/agents/implementer.toml',
     '.claude/commands/harden-card.md',
     '.agent-workflow/bin/delivery-state.mjs',
+    '.agent-workflow/bin/delivery-evidence.mjs',
     '.agent-workflow/contracts/delivery.md',
     '.agent-workflow/manifest.json',
     'agent-workflow.config.json',
@@ -94,7 +95,7 @@ test('installed runtime is independent from the source checkout', async () => {
 
   const manifest = JSON.parse(await readFile(join(repo, '.agent-workflow/manifest.json'), 'utf8'))
   const version = (await readFile(join(SOURCE, 'VERSION'), 'utf8')).trim()
-  assert.equal(version, '0.8.0')
+  assert.equal(version, '0.8.1')
   assert.equal(JSON.parse(await readFile(join(SOURCE, 'package.json'), 'utf8')).version, version)
   assert.equal(JSON.parse(await readFile(join(SOURCE, 'package-lock.json'), 'utf8')).version, version)
   assert.equal(manifest.installedVersion, version)
@@ -108,7 +109,7 @@ test('installed runtime is independent from the source checkout', async () => {
   }
 })
 
-test('0.8.0 update preserves legacy runtime/checkpoints and regenerates distribution hashes', async () => {
+test('0.8.1 update preserves legacy runtime/checkpoints and regenerates distribution hashes', async () => {
   const repo = await makeRepo('agent-workflow-legacy-update-')
   run(SOURCE, 'install', repo)
   const manifestPath = join(repo, '.agent-workflow/manifest.json')
@@ -127,7 +128,7 @@ test('0.8.0 update preserves legacy runtime/checkpoints and regenerates distribu
   assert.equal(await readFile(join(repo, '.delivery/state/PROJ-701.json'), 'utf8'), state)
   assert.equal(await readFile(join(repo, '.delivery/checkpoints/PROJ-701.md'), 'utf8'), checkpoint)
   const next = JSON.parse(await readFile(manifestPath, 'utf8'))
-  assert.equal(next.installedVersion, '0.8.0')
+  assert.equal(next.installedVersion, '0.8.1')
   assert.deepEqual(next.conflicts, [])
   for (const [path, entry] of Object.entries(next.files)) {
     assert.equal(entry.managedSha256, createHash('sha256').update(await readFile(join(repo, path))).digest('hex'))

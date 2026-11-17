@@ -316,6 +316,19 @@ before release.
 Both hooks default to `null`. Updating existing projects preserves their config;
 activating project-specific checks requires their own Node entry points.
 
+## Version 0.8.1
+
+New deliveries verify prepared Git isolation before initialization and before
+starting implementation. Failed preparation cannot create state/checkpoints;
+existing delivery files must be resumed rather than overwritten.
+
+`delivery-evidence.mjs` captures commands with private raw stdout/stderr, actual
+Git identity and hashes, and collects explicit browser/comparison artifacts.
+New CLI states require clean committed-head focused/gate bundles and verified
+archival before DONE. Precommit and expected-red runs retain their original
+identity. Existing state policies and historical receipts are not migrated.
+See the [raw evidence protocol](workflow/contracts/delivery.md#prepared-isolation-and-raw-evidence).
+
 ## Version 0.8.0
 
 Reviews separate evidenced blocking defects (`findings`, P0-P2) from optional
@@ -358,7 +371,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.8.0`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.8.1`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

@@ -1,13 +1,14 @@
 #!/usr/bin/env node
 
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises'
-import { readFileSync, realpathSync } from 'node:fs'
-import { createHash } from 'node:crypto'
-import { dirname, resolve, relative, isAbsolute } from 'node:path'
+import { link, mkdir, readFile, rename, unlink, writeFile } from 'node:fs/promises'
+import { existsSync, readFileSync, realpathSync } from 'node:fs'
+import { createHash, randomUUID } from 'node:crypto'
+import { basename, dirname, resolve, relative, isAbsolute, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
 import { assertCard, loadConfig } from './config.mjs'
+import { verifyEvidence } from './delivery-evidence.mjs'
 
 export const DELIVERY_STATE_VERSION = 2
 export const TERMINAL_STATES = new Set(['DONE', 'NEEDS_HUMAN', 'FAILED'])
@@ -323,12 +324,18 @@ export async function readDeliveryState(repoRoot, card) {
   return JSON.parse(await readFile(statePath(repoRoot, card), 'utf8'))
 }
 
-export async function writeDeliveryState(repoRoot, state) {
+export async function writeDeliveryState(repoRoot, state, { exclusive = false } = {}) {
   const target = statePath(repoRoot, state.card)
   await mkdir(dirname(target), { recursive: true })
-  const temporary = `${target}.tmp`
-  await writeFile(temporary, `${JSON.stringify(state, null, 2)}\n`, { mode: 0o600 })
-  await rename(temporary, target)
+  const temporary = `${target}.${randomUUID()}.tmp`
+  const content = `${JSON.stringify(state, null, 2)}\n`
+  await writeFile(temporary, content, { mode: 0o600, flag: 'wx' })
+  try {
+    if (exclusive) await link(temporary, target)
+    else await rename(temporary, target)
+  } finally {
+    await unlink(temporary).catch(error => { if (error.code !== 'ENOENT') throw error })
+  }
   const checkpoint = resolve(repoRoot, '.delivery', 'checkpoints', `${state.card}.md`)
   await mkdir(dirname(checkpoint), { recursive: true })
   await writeFile(`${checkpoint}.tmp`, deliveryCheckpoint(state), { mode: 0o600 })
@@ -338,7 +345,7 @@ export async function writeDeliveryState(repoRoot, state) {
 
 export function deliverySummary(state) {
   const summary = {}
-  for (const key of ['card', 'state', 'branch', 'worktree', 'baseSha', 'currentHead', 'reworkCycles', 'lastAction', 'pr', 'mergeCommit', 'updatedAt']) {
+  for (const key of ['card', 'state', 'branch', 'worktree', 'baseSha', 'currentHead', 'reworkCycles', 'lastAction', 'pr', 'mergeCommit', 'updatedAt', 'evidenceArchive']) {
     if (state[key] !== undefined) summary[key] = state[key]
   }
   const fields = {
@@ -374,6 +381,47 @@ function checkDeliveryWorktree(state) {
   assert(git(['ls-files', '-v', '-z']).split('\0').filter(Boolean).every((entry) => entry.startsWith('H ')), 'hidden index flags refused')
   git(['merge-base', '--is-ancestor', state.baseSha, state.currentHead])
   return { cwd, git }
+}
+
+function checkPreparedWorktree(repoRoot, state) {
+  assert(state.baseSha && state.branch && state.worktree, 'base, branch and prepared worktree required')
+  const { cwd, git } = checkDeliveryWorktree({ ...state, currentHead: state.baseSha })
+  assert(realpathSync(git(['rev-parse', '--show-toplevel'])) === cwd, 'worktree must be a repository root')
+  assert(git(['symbolic-ref', '--short', 'HEAD']) === state.branch, 'unexpected worktree branch')
+  const common = realpathSync(git(['rev-parse', '--path-format=absolute', '--git-common-dir']))
+  const owner = realpathSync(execFileSync('git', ['rev-parse', '--path-format=absolute', '--git-common-dir'], {
+    cwd: repoRoot, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'],
+  }).trim())
+  assert(common === owner, 'worktree belongs to a different repository')
+  assert(realpathSync(git(['rev-parse', '--absolute-git-dir'])) !== common, 'linked delivery worktree required')
+}
+
+function checkRecordedEvidence(state, validation, kind, archive) {
+  if (!state.policy.evidenceRequired) return
+  validateChecks(validation?.checks)
+  for (const check of validation.checks) {
+    assert(typeof check.receipt === 'string' && check.receipt, 'raw evidence receipt required for every check')
+    const original = resolve(state.worktree, check.receipt)
+    const receipt = archive ? resolve(archive, basename(dirname(original)), 'receipt.json') : original
+    const proof = verifyEvidence({ receipt, card: state.card, base: state.baseSha, head: state.currentHead, kind })
+    assert(proof.command === check.command && proof.exitCode === check.exitCode, 'evidence command/result mismatch')
+    const hash = createHash('sha256').update(readFileSync(receipt)).digest('hex')
+    assert(!check.receiptSha256 || check.receiptSha256 === hash, 'evidence receipt changed')
+    if (archive) assert(check.receiptSha256, 'original evidence hash required before archival')
+    else check.receiptSha256 = hash
+  }
+  for (const artifact of validation.artifacts ?? []) {
+    assert(typeof artifact.receipt === 'string', 'artifact receipt required')
+    const original = resolve(state.worktree, artifact.receipt)
+    const receipt = archive ? resolve(archive, basename(dirname(original)), 'receipt.json') : original
+    const proof = JSON.parse(readFileSync(receipt, 'utf8'))
+    assert(!['focused', 'gate'].includes(proof.kind), 'supplementary artifacts cannot replace command checks')
+    verifyEvidence({ receipt, card: state.card, base: state.baseSha, head: proof.head, kind: proof.kind })
+    const hash = createHash('sha256').update(readFileSync(receipt)).digest('hex')
+    assert(!artifact.receiptSha256 || artifact.receiptSha256 === hash, 'artifact receipt changed')
+    if (archive) assert(artifact.receiptSha256, 'original artifact hash required before archival')
+    else artifact.receiptSha256 = hash
+  }
 }
 
 export function checkProjectValidation(state, config, requestedBinding = state.validation?.binding) {
@@ -440,6 +488,9 @@ async function main() {
   const repoRoot = resolve(flags.repo ?? process.cwd())
   const config = await loadConfig(repoRoot)
   if (command === 'init') {
+    assertCard(flags.card, config.tracker.cardPattern)
+    assert(!existsSync(statePath(repoRoot, flags.card))
+      && !existsSync(resolve(repoRoot, '.delivery/checkpoints', `${flags.card.toUpperCase()}.md`)), 'existing state/checkpoint must be reconciled, never reinitialized')
     const state = createDeliveryState({
       card: flags.card,
       cardPattern: config.tracker.cardPattern,
@@ -455,7 +506,10 @@ async function main() {
       completionCheck: config.commands.completionCheck,
       validationMode: config.delivery.validationMode,
     })
-    await writeDeliveryState(repoRoot, state)
+    checkPreparedWorktree(repoRoot, state)
+    state.worktree = realpathSync(state.worktree)
+    state.policy.evidenceRequired = true
+    await writeDeliveryState(repoRoot, state, { exclusive: true })
     process.stdout.write(`${JSON.stringify(state)}\n`)
     return
   }
@@ -470,11 +524,13 @@ async function main() {
     requireState(state, 'REVIEWING', command)
     validateFocused(state.validation, state.currentHead)
     checkDeliveryWorktree(state)
+    checkRecordedEvidence(state, state.validation, 'focused')
     process.stdout.write(`${JSON.stringify({ card: state.card, head: state.currentHead, scope: 'code_and_focused_checks' })}\n`)
     return
   }
   if (command === 'event') {
     const current = await readDeliveryState(repoRoot, flags.card)
+    if (flags.event === 'start_implementation') checkPreparedWorktree(repoRoot, current)
     let payload
     try {
       assert(!(flags.payload && flags['payload-file']), 'ambiguous payload')
@@ -482,12 +538,21 @@ async function main() {
         ? JSON.parse(await readFile(resolve(repoRoot, flags['payload-file']), 'utf8'))
         : flags.payload ? JSON.parse(flags.payload) : {}
     } catch { throw new Error('INVALID_DELIVERY_PAYLOAD') }
+    if (['implementation_complete', 'rework_complete'].includes(flags.event)) {
+      current.worktree = realpathSync(current.worktree)
+      const pending = { ...current, currentHead: payload.commit }
+      checkDeliveryWorktree(pending)
+      checkRecordedEvidence(pending, payload.validation, 'focused')
+    }
     if (['review_findings', 'reviews_approved', 'review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
       checkDeliveryWorktree(current)
+      current.worktree = realpathSync(current.worktree)
     }
+    if (['review_findings', 'reviews_approved'].includes(flags.event)) checkRecordedEvidence(current, current.validation, 'focused')
     if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
       if (flags.event === 'review_approved') requireState(current, 'VALIDATING', flags.event)
       current.policy.validationMode = config.delivery.validationMode
+      checkRecordedEvidence(current, payload.validation ?? current.validation, 'gate')
       if (config.commands.validationProof) {
         const verified = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
         if (flags.event === 'start_shipping') {
@@ -501,7 +566,16 @@ async function main() {
       current.policy.completionCheck = config.commands.completionCheck
       payload.completion = checkProjectCompletion(repoRoot, current, payload, config)
     }
+    if (flags.event === 'shipped' && current.policy.evidenceRequired) {
+      assert(typeof payload.evidenceArchive === 'string' && payload.evidenceArchive, 'durable evidence archive required before DONE')
+      payload.evidenceArchive = realpathSync(resolve(repoRoot, payload.evidenceArchive))
+      const archiveLocation = relative(resolve(current.worktree), payload.evidenceArchive)
+      assert(archiveLocation === '..' || archiveLocation.startsWith(`..${sep}`) || isAbsolute(archiveLocation), 'evidence archive must survive worktree removal')
+      checkRecordedEvidence(current, current.focusedValidation, 'focused', payload.evidenceArchive)
+      checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
+    }
     const next = transitionDeliveryState(current, flags.event, payload)
+    if (payload.evidenceArchive) next.evidenceArchive = payload.evidenceArchive
     await writeDeliveryState(repoRoot, next)
     process.stdout.write(`${JSON.stringify(next)}\n`)
     return

@@ -34,3 +34,9 @@ security decisions return `needs_human` without edits.
 
 Return card, `rework_complete`, previous/new SHA, findings addressed, validation,
 and unresolved blockers. Then stop. Rework never starts the next review or ships.
+
+Use the delivery contract's raw evidence protocol for reproductions and required
+artifacts. After committing, capture focused checks on the clean new head and
+include each returned `command`, `exitCode` and `receipt`; never relabel the
+precommit or previous-head execution. List supplementary proof bundles in
+`validation.artifacts` so shipping verifies their archival too.

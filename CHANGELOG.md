@@ -1,5 +1,17 @@
 # Changelog
 
+## 0.8.1 (2026-11-17)
+
+- Refuse delivery initialization until the linked Git worktree, branch, owner,
+  frozen base and clean contents are verified; recheck before IMPLEMENTING.
+- Refuse reinitialization of an existing state/checkpoint instead of resetting it.
+- Capture raw command logs and explicit browser/comparison files in private
+  hashed bundles, preserving actual Git identity and dirty precommit/red runs.
+- New CLI states require clean exact-head focused/gate evidence and verify its
+  archive before DONE; preserve existing policies, receipts and counters.
+- Keep read-only reviews independent while obtaining durable additional command
+  proof through the orchestrator when their sandbox cannot write logs.
+
 ## 0.8.0 — 2026-11-16
 
 - Separate evidenced P0-P2 blockers from optional P2-P3 suggestions across review,
