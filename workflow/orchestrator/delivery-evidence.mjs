@@ -1,11 +1,12 @@
 #!/usr/bin/env node
 
 import { createHash } from 'node:crypto'
-import { execFileSync, spawnSync } from 'node:child_process'
+import { execFileSync } from 'node:child_process'
 import { closeSync, copyFileSync, constants, chmodSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readlinkSync, realpathSync, writeFileSync } from 'node:fs'
 import { basename, dirname, isAbsolute, relative, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { assertCard, loadConfig } from './config.mjs'
+import { runOwnedProcess } from './owned-process.mjs'
 
 const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
 const assert = (condition, message) => { if (!condition) throw new Error(message) }
@@ -82,16 +83,28 @@ async function main() {
   const recordFile = (path) => proof.files.push({ path, sha256: digest(readFileSync(resolve(directory, path))) })
   if (action === 'run') {
     const out = openSync(resolve(directory, 'stdout.log'), 'wx', 0o600), err = openSync(resolve(directory, 'stderr.log'), 'wx', 0o600)
+    const controller = new AbortController()
+    const cancel = () => controller.abort()
+    process.once('SIGINT', cancel); process.once('SIGTERM', cancel)
     let result
-    try { result = spawnSync(values[0], values.slice(1), { cwd: root, stdio: ['ignore', out, err] }) }
-    finally { closeSync(out); closeSync(err) }
+    try {
+      result = await runOwnedProcess({ command: values[0], args: values.slice(1), cwd: root,
+        stdio: ['ignore', out, err], signal: controller.signal,
+        timeoutMs: Number(flags['timeout-ms'] ?? 1_800_000),
+        onStatus: (status) => writeFileSync(resolve(directory, 'process.json'), JSON.stringify(status), { mode: 0o600 }) })
+    } finally {
+      process.removeListener('SIGINT', cancel); process.removeListener('SIGTERM', cancel)
+      closeSync(out); closeSync(err)
+    }
     proof.argv = values
     proof.command = values.map(value => /^[a-zA-Z0-9_./:@=+-]+$/.test(value) ? value : "'" + value.replaceAll("'", "'\\''") + "'").join(' ')
     proof.exitCode = result.status
     proof.signal = result.signal
-    proof.result = result.status === 0 && !result.error ? 'passed' : 'failed'
-    if (result.error) proof.error = result.error.code
-    recordFile('stdout.log'); recordFile('stderr.log')
+    proof.timedOut = result.timedOut
+    proof.aborted = result.aborted
+    proof.result = result.status === 0 && !result.error && !result.timedOut && !result.aborted ? 'passed' : 'failed'
+    if (result.error) proof.error = result.error
+    recordFile('stdout.log'); recordFile('stderr.log'); recordFile('process.json')
   } else {
     mkdirSync(resolve(directory, 'artifacts'), { mode: 0o700 })
     values.forEach((source, index) => {

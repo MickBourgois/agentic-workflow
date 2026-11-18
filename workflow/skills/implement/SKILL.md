@@ -32,6 +32,9 @@ hardened and in the configured implementing state.
    it earlier. Align the checks with the change's actual risk and acceptance
    criteria; a token unrelated check is insufficient.
    Align the intended index before validation; leave tested contents unchanged.
+   For a stalled command, use the delivery contract's owned-process diagnostics
+   and its captured lifecycle metadata. Keep the failed run before an
+   evidence-supported environment correction; a timeout never means success.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
 7. Persist `validation.head` equal to the new commit, `validation.focused: passed`,

@@ -179,6 +179,51 @@ the frozen base as an ancestor. The reviewer assesses code and focused evidence;
 its approval does not assert that the final gate passed. Initial and rework
 reviews use the same rule, with stricter project/card instructions preserved.
 
+### CLI review dispatch
+
+When the host cannot dispatch a routed reviewer through its native agent tool,
+use the installed runner instead of constructing an ad-hoc CLI prompt:
+
+```bash
+node .agent-workflow/bin/run-review.mjs --repo <entry-repo> --card PROJ-123 --slot B --timeout-ms 1800000
+```
+
+It reads the durable routing and frozen pair, checks review readiness, and starts
+a new direct read-only Codex exec without a shared daemon, with delegation disabled on the exact model
+and effort. It supplies only card, worktree, pair and slot; a full diff review
+keeps fallback input independent, including after rework. Availability errors,
+timeouts, waits without inspection, missing/invalid results, mismatched identity
+or changed delivery/worktree leave delivery state untouched and produce no
+accepted `receipt.json`. There is no model substitution or automatic approval.
+
+The run directory contains private raw JSONL events, stderr, the untrusted
+`result.json`, safe `process.json` lifecycle metadata, and, only on success, the
+validated receipt. The receipt's `inspected_files` is the reviewer's coverage
+claim. The orchestrator checks it against the actual command events and diff;
+a successful inspection command alone cannot certify review quality. Record
+the accepted receipt through the normal all-slot review event only after that
+check. A partial failure preserves the same pair and counters for reconciliation.
+
+### Owned-process diagnostics
+
+Observe subprocesses through the handle/session returned by their launch and
+the run's `process.json`: PID, lifecycle, exit status, signal and timeout/cancel
+flags. `run-review.mjs` and evidence command capture retain their own child
+handle; SIGINT/SIGTERM or the bounded timeout stop only that child, escalating
+after one second if it resists. Supply `--timeout-ms` for a different command
+budget (default 30 minutes). A cancelled/timed-out command never counts as a pass,
+even when its handler exits zero. These budgets do not authorize retries.
+
+Process tables and global argument dumps can expose unrelated credentials.
+Do not enumerate process arguments or terminate processes by command/path
+patterns, guessed PIDs or a saved PID alone. Without the original owned handle,
+leave the process alone and report the limit. Native host tasks use their launch
+session handle. Children or shared daemons without separately established
+ownership are outside cancellation scope. Diagnostics never print argv,
+environment, credentials or private provider payloads; inspect private raw logs
+locally and redact before sharing. A credential exposure requires a sanitized
+incident report; rotation needs the operator's authorization.
+
 ### Required gate and delivery approval
 
 `reviews_approved` takes all exact-head, scoped receipts and moves REVIEWING to
