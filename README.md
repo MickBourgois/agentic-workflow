@@ -316,6 +316,27 @@ before release.
 Both hooks default to `null`. Updating existing projects preserves their config;
 activating project-specific checks requires their own Node entry points.
 
+## Version 0.8.2
+
+CLI reviewer fallback uses `run-review.mjs` with exact routing, a direct fresh
+read-only exec, delegation disabled and a structured exact-pair/slot receipt.
+Missing inspection, failed/timed-out runs and stale results cannot produce an
+accepted receipt or advance delivery state. The orchestrator still evaluates
+actual review coverage from private command events.
+
+Evidence commands and CLI reviews retain their own process handle and expose
+safe lifecycle metadata. Bounded cancellation stops only that child and keeps
+failed raw proof; diagnostics never require global process arguments or guessed
+PID termination. See the delivery contract for CLI usage and ownership limits.
+
+Run deterministic process/dispatch checks with
+`node --test tests/owned-process.test.mjs tests/run-review.test.mjs`.
+`node scripts/review-smoke.mjs --live` additionally installs into a synthetic
+Git fixture and performs a real read-only reviewer-B inference. It requires a
+Codex CLI supporting `--no-daemon`, `--disable multi_agent` and the routed model;
+it is opt-in, incurs inference usage and never accesses a live tracker or product
+service. See [targeted validation](docs/PILOT-FIXES-VALIDATION.md).
+
 ## Version 0.8.1
 
 New deliveries verify prepared Git isolation before initialization and before
@@ -371,7 +392,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.8.1`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.8.2`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

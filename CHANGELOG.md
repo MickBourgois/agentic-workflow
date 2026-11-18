@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.8.2 (2026-11-18)
+
+- Add an exact-route direct CLI review runner with delegation disabled, private
+  command events and validated card/base/head/slot receipts; failed or incomplete
+  dispatch never advances delivery state or silently substitutes a model.
+- Capture safe process lifecycle metadata for evidence commands and CLI reviews.
+  Cancellation and bounded timeout use the owned child handle, preserving failed
+  proof even if a cancelled command exits zero.
+- Define safe diagnostics without global process argv or pattern-based kills;
+  retain independent review boundaries and existing state/receipt compatibility.
+
 ## 0.8.1 (2026-11-17)
 
 - Refuse delivery initialization until the linked Git worktree, branch, owner,

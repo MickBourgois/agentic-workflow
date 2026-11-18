@@ -1,0 +1,35 @@
+{
+  "type": "object",
+  "additionalProperties": false,
+  "required": ["card", "reviewed_base", "reviewed_head", "reviewer_slot", "scope", "status", "inspected_files", "findings", "suggestions"],
+  "properties": {
+    "card": { "type": "string" },
+    "reviewed_base": { "type": "string" },
+    "reviewed_head": { "type": "string" },
+    "reviewer_slot": { "enum": ["single", "A", "B"] },
+    "scope": { "enum": ["code_and_focused_checks"] },
+    "status": { "enum": ["approved", "findings"] },
+    "inspected_files": { "type": "array", "items": { "type": "string" } },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["id", "priority", "file", "line", "requirement", "evidence", "required_change"],
+        "properties": {
+          "id": { "type": "string" }, "priority": { "enum": ["P0", "P1", "P2"] },
+          "file": { "type": "string" }, "line": { "type": "integer" },
+          "requirement": { "type": "string" }, "evidence": { "type": "string" },
+          "required_change": { "type": "string" }
+        }
+      }
+    },
+    "suggestions": {
+      "type": "array",
+      "items": {
+        "type": "object", "additionalProperties": false,
+        "required": ["priority", "suggestion"],
+        "properties": { "priority": { "enum": ["P2", "P3"] }, "suggestion": { "type": "string" } }
+      }
+    }
+  }
+}

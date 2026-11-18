@@ -105,23 +105,26 @@ function validateBlockingFindings(findings) {
   }
 }
 
+export function validateReviewReceipt(state, receipt, legacy = false) {
+  assert(receipt && typeof receipt === 'object', 'review receipt required')
+  assert(receipt.reviewed_head === state.currentHead, 'review receipt head does not match current head')
+  assert(['approved', 'findings'].includes(receipt.status), 'invalid review receipt status')
+  assert(legacy || receipt.scope === 'code_and_focused_checks', 'review scope must be code_and_focused_checks')
+  if (!legacy) {
+    if (receipt.status === 'findings') validateBlockingFindings(receipt.findings)
+    else assert(receipt.findings === undefined || (Array.isArray(receipt.findings) && receipt.findings.length === 0),
+      'approved review cannot contain blocking findings')
+    assert(receipt.suggestions === undefined || (Array.isArray(receipt.suggestions) && receipt.suggestions.every((suggestion) =>
+      ['P2', 'P3'].includes(suggestion.priority) && typeof suggestion.suggestion === 'string' && suggestion.suggestion.trim())),
+    'suggestions must be nonblocking P2-P3 advice')
+  }
+}
+
 function validateReviewReceipts(state, receipts, legacy = false) {
   assert(Array.isArray(receipts), 'review receipts must be an array')
   assert(receipts.length === state.route.reviewers.length,
     `expected ${state.route.reviewers.length} review receipt(s), got ${receipts.length}`)
-  for (const receipt of receipts) {
-    assert(receipt.reviewed_head === state.currentHead, 'review receipt head does not match current head')
-    assert(['approved', 'findings'].includes(receipt.status), 'invalid review receipt status')
-    assert(legacy || receipt.scope === 'code_and_focused_checks', 'review scope must be code_and_focused_checks')
-    if (!legacy) {
-      if (receipt.status === 'findings') validateBlockingFindings(receipt.findings)
-      else assert(receipt.findings === undefined || (Array.isArray(receipt.findings) && receipt.findings.length === 0),
-        'approved review cannot contain blocking findings')
-      assert(receipt.suggestions === undefined || (Array.isArray(receipt.suggestions) && receipt.suggestions.every((suggestion) =>
-        ['P2', 'P3'].includes(suggestion.priority) && typeof suggestion.suggestion === 'string' && suggestion.suggestion.trim())),
-      'suggestions must be nonblocking P2-P3 advice')
-    }
-  }
+  for (const receipt of receipts) validateReviewReceipt(state, receipt, legacy)
   const actual = receipts.map((receipt) => receipt.reviewer_slot).sort()
   const expected = requiredReviewSlots(state).sort()
   assert(JSON.stringify(actual) === JSON.stringify(expected),
@@ -132,6 +135,14 @@ function validateFocused(validation, head) {
   assert(validation?.head === head, 'focused validation head does not match commit')
   assert(validation.focused === 'passed', 'review requires passing focused validation')
   validateChecks(validation.checks)
+}
+
+export function assertReviewReady(state) {
+  assert([1, DELIVERY_STATE_VERSION].includes(state.version), 'unsupported delivery state version; needs human reconciliation')
+  requireState(state, 'REVIEWING', 'review-ready')
+  validateFocused(state.validation, state.currentHead)
+  checkDeliveryWorktree(state)
+  checkRecordedEvidence(state, state.validation, 'focused')
 }
 
 function validateChecks(checks) {
@@ -520,11 +531,7 @@ async function main() {
   }
   if (command === 'review-ready') {
     const state = await readDeliveryState(repoRoot, flags.card)
-    assert([1, DELIVERY_STATE_VERSION].includes(state.version), 'unsupported delivery state version; needs human reconciliation')
-    requireState(state, 'REVIEWING', command)
-    validateFocused(state.validation, state.currentHead)
-    checkDeliveryWorktree(state)
-    checkRecordedEvidence(state, state.validation, 'focused')
+    assertReviewReady(state)
     process.stdout.write(`${JSON.stringify({ card: state.card, head: state.currentHead, scope: 'code_and_focused_checks' })}\n`)
     return
   }

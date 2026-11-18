@@ -82,6 +82,10 @@ slot-specific prior receipt and its reviewed head.
 Require `/code-review` and exact-head receipts with `scope: code_and_focused_checks`.
 Never pass implementation
 transcripts, rationale, conclusions, or another review.
+If the routed reviewer is unavailable in the host agent tool, follow the delivery
+contract's CLI review dispatch using `run-review.mjs`. Inspect its raw command
+events and coverage before accepting the receipt. An empty wait or failed CLI
+dispatch is not a review and never authorizes a route substitution.
 
 If every required receipt approves the current head, record `reviews_approved`
 with those receipts, moving `REVIEWING -> VALIDATING`. This is code approval
