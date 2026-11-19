@@ -26,4 +26,11 @@ if (!await readFile(join(repo, '.codex/agents/reviewer.toml'), 'utf8')) throw ne
 if (!await readFile(join(repo, '.claude/commands/rework.md'), 'utf8')) throw new Error('Claude command missing')
 if (!await readFile(join(repo, '.agent-workflow/manifest.json'), 'utf8')) throw new Error('manifest missing')
 
+const preview = JSON.parse(execFileSync(process.execPath, [
+  join(repo, '.agent-workflow/bin/run-card.mjs'), 'PROJ-123', '--dry-run',
+], { cwd: repo, encoding: 'utf8' }))
+if (preview.result !== null || !preview.command.args.at(-1).includes('/start-card skill for PROJ-123')) {
+  throw new Error('direct card entry point missing from dry run')
+}
+
 process.stdout.write(`Smoke test passed in ${repo}\n`)

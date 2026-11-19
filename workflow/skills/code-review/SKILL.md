@@ -33,6 +33,11 @@ failing or insufficient required checks block approval, including any build or
 early full gate explicitly mandated by stricter instructions. The workflow does
 not otherwise require `commands.fullCheck` or a gate binding before review.
 Never use a partial or stale gate receipt as evidence of successful validation.
+Judge the accepted outcome and regressions introduced by this change. Cite the
+accepted criterion, applicable project rule, or previously working behavior for
+each blocker, and show the failure and its consequence. Pre-existing defects
+outside the change and extra acceptance criteria are optional feedback. An
+approval can end with zero findings and zero suggestions.
 For new evidence-required deliveries, inspect the raw focused bundles and their
 hashes using `delivery-evidence.mjs verify`. Review remains read-only: if another
 check is needed and the sandbox cannot retain its raw output, request that exact

@@ -1,7 +1,8 @@
 # Hardened Card Template
 
-Use these core sections. Keep detail proportional to the changed behavior and
-reuse applicable project rules by reference instead of copying their checklists.
+Keep the card's existing structure when the outcome and how to verify it are
+clear. Use these prompts only for missing content. Reference applicable project
+rules instead of copying their checklists.
 
 ```markdown
 ## Context
@@ -20,9 +21,8 @@ reuse applicable project rules by reference instead of copying their checklists.
 <Observable and verifiable statements.>
 
 ## Validation
-<Exact focused commands, relevant lint/types, named regression proof or practical
-alternative, and the required final gate. For UI changes, include concrete
-browser actions and expected results.>
+<Observable evidence or the focused command when it matters to the outcome.
+For UI changes, give the browser action and expected result if necessary.>
 ```
 
 Add `Risks / dependencies`, `Agent guardrails` or `Human validation required`

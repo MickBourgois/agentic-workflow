@@ -40,7 +40,7 @@ export const WORKFLOW_DEFAULTS = Object.freeze({
   },
   delivery: {
     validationMode: 'full',
-    maxReworkCycles: 2,
+    maxReworkCycles: 1,
     maxEscalations: 1,
   },
 })

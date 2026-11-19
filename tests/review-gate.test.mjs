@@ -114,6 +114,30 @@ test('missing, failed, partial and wrong-pair gates block delivery approval and 
   assert.equal(transitionDeliveryState(state, 'review_approved', { validation: { ...gate(), profile: 'affected', reason: 'tested project policy' } }).state, 'APPROVED')
 })
 
+test('new delivery budget caps older config values and keeps historical limits on resume', () => {
+  const makeState = (maxReworkCycles) => createDeliveryState({ card: 'PROJ-701', complexity: 'standard', maxReworkCycles })
+  assert.equal(makeState().policy.maxReworkCycles, 1)
+  assert.equal(makeState(2).policy.maxReworkCycles, 1)
+  assert.equal(makeState(0).policy.maxReworkCycles, 0)
+  const secondRound = { ...reviewing(), reworkCycles: 1 }
+  const defect = finding()
+  const payload = { receipts: [{ ...receipt('head', 'single', 'findings'), findings: [defect] }], findings: [defect] }
+  assert.equal(transitionDeliveryState(secondRound, 'review_findings', payload).state, 'NEEDS_HUMAN')
+  secondRound.policy.maxReworkCycles = 2
+  assert.equal(transitionDeliveryState(secondRound, 'review_findings', payload).state, 'REWORKING')
+})
+
+test('focused gate reuse rejects historical, complex and critical deliveries', () => {
+  for (const complexity of ['simple', 'complex', 'critical']) {
+    const state = reviewing(complexity)
+    state.policy.evidenceRequired = true
+    if (complexity !== 'simple') state.policy.reuseFocusedChecks = true
+    const receipts = complexity === 'critical' ? [receipt('head', 'A'), receipt('head', 'B')] : [receipt('head')]
+    const pending = transitionDeliveryState(state, 'reviews_approved', { receipts })
+    assert.throws(() => transitionDeliveryState(pending, 'review_approved', { useReviewedFocused: true }), /not permitted/)
+  }
+})
+
 // A real tracked project hook: running the gate is separate from verifying it.
 const verifier = `import { readFileSync, writeFileSync } from 'node:fs';
 import { createHash } from 'node:crypto';

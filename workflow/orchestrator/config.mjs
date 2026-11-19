@@ -94,6 +94,9 @@ export async function loadConfig(repoRoot) {
   if (config.delivery.validationMode === 'project' && project.delivery?.validationMode !== 'project') {
     throw new Error('Project validation mode must be explicitly enabled in project configuration')
   }
+  if (!Number.isInteger(config.delivery.maxReworkCycles) || config.delivery.maxReworkCycles < 0) {
+    throw new Error('Invalid delivery.maxReworkCycles: expected a nonnegative integer')
+  }
   try {
     new RegExp(config.tracker.cardPattern)
   } catch (error) {

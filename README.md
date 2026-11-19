@@ -1,7 +1,7 @@
 # agentic-workflow
 
 A portable, risk-adaptive delivery workflow for agentic coding. It turns one
-hardened tracker card into one isolated implementation, independently reviewed at
+executable tracker card into one isolated implementation, independently reviewed at
 the card's actual risk level, reworked in bounded fresh contexts, and shipped
 through normal repository gates.
 
@@ -40,7 +40,7 @@ technology stack.
 explicit card
     |
     v
-/harden-card
+readiness and routing in /start-card
     |
     +--> critical safety override?
     |         |
@@ -64,7 +64,7 @@ explicit card
                        |                 |
                        +<--- fresh review on new head
                               |
-                        required gate on approved base/head
+                        reuse focused proof or run required gate
                               |
                         fresh shipper
                               |
@@ -182,13 +182,14 @@ See [Configuration](docs/CONFIGURATION.md) for the complete shape and precedence
 
 ## Daily workflow
 
-1. Harden and route an explicit card:
+1. Start an executable card directly. Use `/harden-card` to resolve a genuine
+   gap in scope, acceptance criteria or dependencies.
 
    ```text
-   /harden-card PROJ-123
+   /start-card PROJ-123
    ```
 
-2. Deliver exactly that card in a new top-level Codex process:
+2. To start from a terminal in a dedicated Codex process:
 
    ```bash
    node .agent-workflow/bin/run-card.mjs PROJ-123
@@ -226,11 +227,12 @@ instructions. A bounded correction may receive an incremental review using only 
 previous receipt from local state; missing local context, sensitive or uncertain
 impact requires the complete diff. Reviews explicitly approve code and focused
 checks. Once all slots approve,
-`reviews_approved` enters `VALIDATING`; the required gate runs on that exact
-base/head before `review_approved` grants delivery approval. A full check remains
-the default final gate before shipping. A project can explicitly opt into a tested,
-fail-closed impact policy to select a reduced required gate; uncertainty and
-sensitive changes still require the full gate. See the project integration contract.
+`reviews_approved` enters `VALIDATING`. Eligible simple and standard changes
+reuse their reviewed focused proof as the local gate. Other changes run the
+required gate on the exact base/head. Critical and uncertain changes require
+full validation. New deliveries get at most one rework and two review rounds.
+The PR runs required checks before merge, then shipping verifies the matching
+deployment. Scheduled regressions run independently. See the integration contract.
 When `commands.validationProof` is not configured, verifying the proof's
 authenticity and freshness remains the responsibility of the project workflow;
 the CLI still requires an exact-pair, passing required-gate record.
@@ -249,8 +251,7 @@ the CLI still requires an exact-pair, passing required-gate record.
 
 ## Skills and commands
 
-- `/harden-card`: red-team readiness, score evidence, apply critical overrides,
-  and persist the exact route.
+- `/harden-card`: resolve concrete readiness gaps and persist the route.
 - `/rework`: reproduces and fixes only confirmed findings. It never self-approves
   or continues into shipping.
 - `/start-card`: the one-card orchestrator and resume entry point.
@@ -392,7 +393,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.8.2`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.9.0`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

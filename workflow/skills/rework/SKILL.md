@@ -21,12 +21,12 @@ security decisions return `needs_human` without edits.
    for confirmed blockers only. Preserve accepted scope/design decisions;
    optional suggestions do not require edits or consume a cycle.
 4. Add or adjust proof for each correction.
-5. Run affected proof, relevant lint/type checks and invalidated card checks, including a build or early
-   full gate when project/card instructions require it. Record commands and results;
-   unavailable or failing required focused checks block review. Do not call this
-   a full gate or reuse a stale binding.
-6. Create one card/finding-referencing commit, update the checkpoint to
-   `REVIEWING`, and increment the cycle.
+5. Run checks explicitly required before commit, including a build or early
+   full gate when project/card instructions require it. After committing, run
+   affected proof, relevant lint/type checks and invalidated card checks required
+   for review on the clean new head. Unavailable or failing required checks block handoff.
+6. Use one card/finding-referencing correction commit. After validation, record
+   the correction, update the checkpoint to `REVIEWING`, and increment the cycle.
    Set `validation.head` to the new commit and `validation.focused` to `passed`
    only after the required focused checks pass. Set `validation.checks` to a
    non-empty array of `{command, exitCode: 0}` for the checks actually run;

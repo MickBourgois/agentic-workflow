@@ -12,39 +12,40 @@ card, relevant domain docs, `agent-workflow.config.json`, and
 authoritative; do not consume earlier-agent transcripts.
 
 Require card ID, worktree/branch, base SHA, and model/reasoning route. Stop as
-`needs_human` if inputs are missing, isolation is shared, or the card is not
-hardened and in the configured implementing state.
+`needs_human` if inputs are missing, isolation is shared, or the card lacks
+validated delivery routing or the configured implementing state.
 
 1. Confirm worktree, branch, base, and clean starting state. Preserve unrelated
    user work.
 2. Map acceptance criteria to tests and the smallest changes.
    Preserve accepted scope/design decisions; optional card suggestions remain
    optional. Read the same applicable project conventions as the reviewer.
-3. Use TDD at declared seams where practical; prove required regression tests fail
-   before the fix.
-   Capture this execution as `regression` evidence, including the expected
-   nonzero exit, before changing the implementation. Keep its raw output.
+3. Choose proof proportional to the behavior changed. Use red/green TDD when
+   the project or card requires it, or when a reproducible bug or a consequential
+   invariant benefits from proving the failure first. Capture the expected
+   nonzero result as `regression` evidence when running a red check.
+   Prefer an existing covering test or a focused smoke for routine changes.
 4. Implement only the card.
-5. Run focused proof, available relevant lint/type checks and all checks required before commit/review by project
-   instructions or the card, including a build when required. An unavailable or
-   failing required check blocks review. The workflow defers `commands.fullCheck`
-   until all reviews approve, unless stricter project/card instructions require
-   it earlier. Align the checks with the change's actual risk and acceptance
-   criteria; a token unrelated check is insufficient.
+5. Run any explicitly required precommit checks, including a build when required.
+   Schedule focused handoff checks on the clean commit when project/card
+   instructions permit it. Run the relevant lint/type checks where they cover
+   the actual change. The workflow defers `commands.fullCheck` until reviews
+   approve unless the project/card requires it earlier.
    Align the intended index before validation; leave tested contents unchanged.
    For a stalled command, use the delivery contract's owned-process diagnostics
    and its captured lifecycle metadata. Keep the failed run before an
    evidence-supported environment correction; a timeout never means success.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
-7. Persist `validation.head` equal to the new commit, `validation.focused: passed`,
+7. Run the required focused checks on the clean exact head through
+   `delivery-evidence.mjs run --kind focused`. Repair a failed check before any
+   review and capture fresh results on the corrected commit.
+   Persist `validation.head` equal to the new commit, `validation.focused: passed`,
    and a non-empty `validation.checks` array of `{command, exitCode: 0}` for the
    checks actually passed on these unchanged contents. Transition to `REVIEWING`.
-   Focused validation is not a required-gate receipt. Binding the final gate is
-   the orchestrator's responsibility after reviews; never rebind an older receipt.
+   Gate approval is the orchestrator's responsibility after reviews.
 
-After committing, run the required focused checks on the clean exact head through
-`delivery-evidence.mjs run --kind focused` (delivery contract). Record the returned
+Record the returned
 `command`, `exitCode` and `receipt` per check. Precommit requirements still run
 before commit; capture them as `precommit`, then list those receipts and all
 required red/browser/comparison bundles in `validation.artifacts`. Preserve the

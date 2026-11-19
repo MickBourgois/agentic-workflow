@@ -23,6 +23,14 @@ Never create a missing label automatically. Apply existing labels, report missin
 ones, and stop only when the missing label is essential. The routing comment is
 authoritative when optional complexity labels are absent.
 
+For a new, explicitly selected card in inline intake, start-card may use the
+configured ready or backlog state without adding hardened or ready labels. It
+checks native blockers and project holds, keeps existing acceptance criteria,
+and persists one marked routing comment with the classification, score or
+critical override, dimension evidence, and resolved implementation and reviewer
+routes. Unattended backlog selection still requires the configured readiness
+labels and recorded routing.
+
 ## Completion
 
 A card reaches the configured `done` status only after the merge is confirmed on

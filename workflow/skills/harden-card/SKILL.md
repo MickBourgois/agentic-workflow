@@ -1,13 +1,13 @@
 ---
 name: harden-card
-description: Red-team, classify, and route explicit Linear implementation cards before delivery.
+description: Resolve concrete readiness gaps and route an explicit Linear implementation card.
 disable-model-invocation: true
 ---
 
 # Harden Cards
 
-This is the Product -> Delivery gate. Produce executor-proof cards and a
-deterministic route. Planning only: never implement, branch, or start delivery.
+Use this when a card needs clarification. An executable card goes directly to
+`/start-card`. This skill only prepares the card and its route.
 
 Read `.agent-workflow/contracts/delivery.md`,
 `.agent-workflow/contracts/tracker-linear.md`, project instructions,
@@ -19,10 +19,8 @@ Read `.agent-workflow/contracts/delivery.md`,
 1. Require explicit target cards; never select unrelated backlog.
 2. Require a configured Linear team and issue CRUD. Fetch each full description,
    comment, label, status, and native relation.
-3. Inspect current code, schemas, tests, routes, and relevant project decisions.
-   Cite `path:line` evidence.
-4. Map owners, callers, data flow, validation seams, dependencies, and blast
-   radius. Discoverable facts come from the repository, not questions.
+3. Inspect the relevant code and project decisions needed to resolve a gap or
+   classify impact. Cite `path:line` for non-obvious claims.
 
 If the ticket set does not exist, stop and direct the user to their planning or
 ticket-creation workflow.
@@ -73,10 +71,11 @@ Questions:
 - <blocking questions only>
 ```
 
-After approval, use the card template's core sections and only applicable risk
-sections. Preserve approved functional wording and accepted decisions. An
-optional suggestion becomes mandatory only after explicit scope approval.
-Routing metadata belongs in the routing comment, not the description.
+After approval, patch only unresolved gaps. Keep the existing structure and
+wording where they already explain the outcome and its proof. Use the template
+for missing content. A ready card's description may need no change. Optional
+suggestions require explicit scope approval before becoming acceptance criteria.
+Store routing metadata in its marked comment.
 
 ## Persist
 

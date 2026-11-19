@@ -69,10 +69,11 @@ test('browser/comparison artifacts survive archival and missing files are never 
   f.run('collect', ['--kind', 'browser', '--', join(f.root, 'missing.html')], 1)
 })
 
-test('new deliveries require raw exact-head receipts through review, approval and archived DONE', async () => {
+for (const reuse of [false, true]) test(`exact-head evidence survives review, shipping and DONE (${reuse ? 'reused focused' : 'separate gate'})`, async () => {
   const f = await fixture()
   let state = createDeliveryState({ card: 'PROJ-802', complexity: 'simple', baseSha: f.head, worktree: f.root })
   state.policy.evidenceRequired = true
+  state.policy.reuseFocusedChecks = true
   state = transitionDeliveryState(state, 'start_implementation')
   await writeDeliveryState(f.root, state)
   const stateCli = resolve('workflow/orchestrator/delivery-state.mjs')
@@ -95,12 +96,26 @@ test('new deliveries require raw exact-head receipts through review, approval an
   focused.artifacts = [{ receipt: browser.receipt }]
   await event('implementation_complete', { commit: f.head, validation: focused })
   await event('reviews_approved', { receipts: [{ reviewed_head: f.head, reviewer_slot: 'single', status: 'approved', scope: 'code_and_focused_checks' }] })
-  const gateCapture = f.run('run', ['--kind', 'gate', '--', process.execPath, '-e', 'console.log("full gate")'])
-  const validation = { kind: 'required_gate', result: 'passed', head: f.head, base: f.head,
-    profile: 'full', reason: 'fixture full gate', receipt: gateCapture.receipt,
-    checks: [{ command: gateCapture.command, exitCode: 0, receipt: gateCapture.receipt }] }
-  await event('review_approved', { validation: { ...validation, checks: focused.checks } }, 1)
-  await event('review_approved', { validation })
+  let finalCapture = capture
+  if (reuse) {
+    const original = await readFile(join(capture.directory, 'stdout.log'), 'utf8')
+    await event('review_approved', {}, 1)
+    await writeFile(join(capture.directory, 'stdout.log'), 'tampered')
+    await event('review_approved', { useReviewedFocused: true }, 1)
+    await writeFile(join(capture.directory, 'stdout.log'), original)
+    const approved = await event('review_approved', { useReviewedFocused: true })
+    assert.equal(approved.validation.profile, 'reviewed-focused')
+    assert.equal(approved.validation.receipt, capture.receipt)
+    assert.deepEqual(approved.validation.checks, approved.focusedValidation.checks)
+    await event('validation_refreshed', { validation: approved.validation }, 1)
+  } else {
+    finalCapture = f.run('run', ['--kind', 'gate', '--', process.execPath, '-e', 'console.log("full gate")'])
+    const validation = { kind: 'required_gate', result: 'passed', head: f.head, base: f.head,
+      profile: 'full', reason: 'fixture full gate', receipt: finalCapture.receipt,
+      checks: [{ command: finalCapture.command, exitCode: 0, receipt: finalCapture.receipt }] }
+    await event('review_approved', { validation: { ...validation, checks: focused.checks } }, 1)
+    await event('review_approved', { validation })
+  }
   await event('start_shipping', {})
   const shipping = { mergeCommit: f.head, pr: 'https://example.test/pr/1' }
   await event('shipped', shipping, 1)
@@ -112,7 +127,7 @@ test('new deliveries require raw exact-head receipts through review, approval an
   await writeFile(join(archive, browser.directory.split('/').at(-1), 'artifacts/0-screenshot.html'), 'altered artifact')
   await event('shipped', { ...shipping, evidenceArchive: archive }, 1)
   await cp(join(f.root, '.delivery/evidence/PROJ-802'), archive, { recursive: true })
-  await writeFile(join(archive, gateCapture.directory.split('/').at(-1), 'stdout.log'), 'tampered')
+  await writeFile(join(archive, finalCapture.directory.split('/').at(-1), 'stdout.log'), 'tampered')
   await event('shipped', { ...shipping, evidenceArchive: archive }, 1)
   await cp(join(f.root, '.delivery/evidence/PROJ-802'), archive, { recursive: true })
   const stored = JSON.parse(await readFile(join(f.root, '.delivery/state/PROJ-802.json'), 'utf8'))

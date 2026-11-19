@@ -46,7 +46,7 @@ precedence, is gitignored, and is suitable for machine-only command overrides.
   },
   "delivery": {
     "validationMode": "full",
-    "maxReworkCycles": 2,
+    "maxReworkCycles": 1,
     "maxEscalations": 1
   }
 }
@@ -60,14 +60,20 @@ the first available package script among `check`, `verify`, `ci`, and `test`.
 isolated worktree truly needs an ignored local file. Pair risky targets with a
 clear `environment.warnings` message in project config.
 
-Routing models are workflow behavior, not project configuration. They remain in
-the versioned central defaults so the classification contract has one source of
-truth.
+Routing models and readiness rules live in the canonical workflow. Use
+`/start-card` directly for an executable ticket. New deliveries allow at most
+one rework, including with older config values above one. Set
+`maxReworkCycles: 0` to stop after the first review with blockers.
+Existing deliveries keep their recorded limits.
 
 `delivery.validationMode` defaults to `full`. Set it to `project` in the
 project configuration only after the project has a tested fail-closed impact
 policy, matching CI and evidence verification. Unknown or sensitive impact
 must use the full gate. Local configuration cannot enable project mode alone.
+
+Eligible simple or standard deliveries reuse their approved focused checks as
+the local gate. The [integration contract](../workflow/contracts/project-integration.md)
+defines eligibility, required PR CI, post-merge checks and scheduled regression.
 
 `commands.validationProof` and `commands.completionCheck` optionally name
 project-owned Node entry points. The former binds/verifies immutable required-gate
