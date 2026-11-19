@@ -51,7 +51,9 @@ verification for those receipts.
 | Default branch schedule or manual dispatch | Broad regression suite on a recorded revision using isolated fixtures. Surface failures in CI. | Outside individual deliveries. |
 
 Select PR coverage inside the required job and cancel superseded runs for the
-same PR. Use one deployment owner. When the hosting platform deploys the
+same PR. Disable duplicate automatic PR code reviews in hosting integrations
+and use the workflow's independent reviews. Use one deployment owner.
+When the hosting platform deploys the
 production branch automatically, verify its deployment for the merge commit.
 A successful smoke run for that commit can supply the shipper's proof.
 A scheduled regression run tests a Git revision. A production smoke checks

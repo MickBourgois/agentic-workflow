@@ -4,12 +4,32 @@ import { closeSync, openSync, realpathSync, writeFileSync } from 'node:fs'
 import { mkdir, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { execFileSync } from 'node:child_process'
 import { assertCard, loadConfig } from './config.mjs'
 import { assertReviewReady, readDeliveryState, routeFor, validateReviewReceipt } from './delivery-state.mjs'
 import { runOwnedProcess } from './owned-process.mjs'
 
 const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const assert = (condition, message) => { if (!condition) throw new Error(message) }
+
+function boundedReworkContext(state, slot) {
+  const previous = state.previousReview
+  if (!['simple', 'standard'].includes(state.complexity) || !previous || previous.base !== state.baseSha
+    || !previous.head || previous.head === state.baseSha) return null
+  try {
+    const receipt = previous.receipts.find((item) => item.reviewer_slot === slot)
+    validateReviewReceipt({ currentHead: previous.head }, receipt)
+    if (receipt.reviewed_base && receipt.reviewed_base !== state.baseSha) return null
+    const ancestry = execFileSync('git', ['rev-list', '--parents', '-n', '1', state.currentHead],
+      { cwd: state.worktree, encoding: 'utf8', stdio: ['ignore', 'pipe', 'ignore'] }).trim()
+    if (ancestry === `${state.currentHead} ${previous.head}`) {
+      return { head: previous.head, status: receipt.status, findings: receipt.findings ?? [] }
+    }
+  } catch {
+    // Missing or invalid prior context requires a fresh review of the whole card.
+  }
+  return null
+}
 
 export async function runReview({ repoRoot, card, slot, timeoutMs = 1_800_000,
   codexBin = process.env.CODEX_BIN ?? 'codex', signal }) {
@@ -27,6 +47,7 @@ export async function runReview({ repoRoot, card, slot, timeoutMs = 1_800_000,
   await mkdir(parent, { recursive: true, mode: 0o700 })
   const runDir = await mkdtemp(resolve(parent, `${slot}-`))
   const resultFile = resolve(runDir, 'result.json')
+  const rework = boundedReworkContext(state, slot)
   const args = ['--no-daemon', 'exec', '--model', route.model, '-c', `model_reasoning_effort="${route.reasoning}"`,
     '--disable', 'multi_agent', '--sandbox', 'read-only', '--json',
     '--output-schema', resolve(SCRIPT_DIR, '..', 'schemas', 'review-result.schema.json'),
@@ -37,7 +58,9 @@ export async function runReview({ repoRoot, card, slot, timeoutMs = 1_800_000,
     `Frozen base: ${state.baseSha}; reviewed head: ${state.currentHead}.`,
     `Your route is ${route.model}/${route.reasoning}.`,
     'Read the card, project instructions, delivery contract and /code-review skill directly.',
-    'Use a complete diff review. Read only code, tests and objective validation evidence.',
+    rework
+      ? `Prior receipt for your slot only. Use it to scope the correction under /code-review: ${JSON.stringify(rework)}`
+      : 'Use a complete diff review of the card. Read only code, tests and objective validation evidence.',
     'Review directly in this fresh context. Delegation is disabled; return your own review, not a wait or handoff.',
     'Implementation transcripts and other reviewers\' receipts are outside your review input.',
     'Use safe owned-process diagnostics from the delivery contract.',

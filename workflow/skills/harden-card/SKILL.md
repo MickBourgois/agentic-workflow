@@ -11,8 +11,9 @@ Use this when a card needs clarification. An executable card goes directly to
 
 Read `.agent-workflow/contracts/delivery.md`,
 `.agent-workflow/contracts/tracker-linear.md`, project instructions,
-`agent-workflow.config.json`, `references/hardening-rubric.md`, and
-`references/card-template.md` completely.
+`agent-workflow.config.json`. Use the rubric only to resolve an identified
+gap or assess a concrete risk. Use the template only if the card lacks a
+usable description.
 
 ## Intake
 
@@ -27,10 +28,15 @@ ticket-creation workflow.
 
 ## Readiness gate
 
-Apply relevant rubric branches to the smallest observable success. Each mandatory
-addition must cite an accepted requirement, applicable project rule or credible
-failure mode in the changed scope. Keep polish, alternative designs, speculative
-future needs and unrelated cleanup optional, outside acceptance criteria.
+Stop expanding the card as soon as it has an observable outcome, a bounded
+change and a practical way to verify it. A concise existing description is
+enough. Leave routine implementation choices to the implementer.
+
+Add a criterion only when its omission could make the accepted behavior
+ambiguous, leave a material regression unchecked, or violate a binding project
+rule. State the observable outcome or invariant in one sentence. Link to
+existing requirements and test conventions instead of copying them. Treat
+polish, speculative edge cases and alternative designs as out of scope.
 
 A blocking product, architecture, security, or operator choice
 sets the card to the configured needs-info state and blocks hardening. Split work
@@ -51,30 +57,13 @@ Use the installed routing engine for the final route; do not improvise a model:
 node .agent-workflow/bin/agent-workflow.mjs route <complexity> --score <score> --dimensions '<json>'
 ```
 
-## Approval-first patch
+## Minimal patch
 
-Unless the user already authorized direct edits, first report:
-
-```markdown
-Hardening result: <ready | needs edits | blocked>
-
-Must fix before execution:
-- <card>: <gap> -> <planned edit>
-
-Suggested but optional:
-- <card>: <gap> -> <planned edit>
-
-Proposed routing:
-- <card>: <complexity>, <score/override evidence>, <implementation>, <review>
-
-Questions:
-- <blocking questions only>
-```
-
-After approval, patch only unresolved gaps. Keep the existing structure and
-wording where they already explain the outcome and its proof. Use the template
-for missing content. A ready card's description may need no change. Optional
-suggestions require explicit scope approval before becoming acceptance criteria.
+A ready card needs only routing. If an edit is needed, give the specific gap
+and the smallest proposed wording. Ask before changing the card description
+unless the user already authorized editing it. Ask only decisions that block
+execution. Keep the existing structure and wording when possible. Optional
+suggestions require scope approval before becoming acceptance criteria.
 Store routing metadata in its marked comment.
 
 ## Persist

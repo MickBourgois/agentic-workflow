@@ -6,15 +6,15 @@ disable-model-invocation: true
 
 # Independent Card Review
 
-Run in a fresh read-only context. Read project instructions, the full card and
-comments, `.agent-workflow/contracts/delivery.md`, repository standards, and the
-diff. Do not read implementation transcripts, rationale, or another reviewer's
-receipt. For a bounded rework only, the orchestrator may supply this slot's own
-previous receipt and its reviewed head; use it as context, not approval.
+Run in a fresh read-only context. Read the card's accepted requirements,
+relevant decisions in its comments, project rules that apply to the change,
+and `.agent-workflow/contracts/delivery.md`. Keep implementation transcripts
+and other reviewers' receipts outside the review.
 
 Require card ID, repository/worktree, base/head SHAs, and reviewer slot (`single`,
 `A`, or `B`). Resolve both SHAs, require a non-empty diff, and review exactly
-`git diff <base>...<head>` plus affected callers and tests on the first review.
+`git diff <base>...<head>` on the first pass. Follow changed behavior into
+directly affected callers and tests where needed to judge impact.
 For a bounded rework with a verified previous receipt on the same base, inspect
 `git diff <previous-head> <head>`, affected callers and tests, and all findings from that slot’s previous receipt. Review the complete card diff if the base changed, the prior receipt
 is unavailable, scope or impact is uncertain, or a sensitive contract changes.
@@ -26,44 +26,26 @@ defect still blocks under the delivery contract's blocking policy, including on
 a required full-diff re-review; explain its scenario and impact. An alternative
 design or extra coverage without a demonstrated defect stays optional.
 
-For both initial and rework reviews, require recorded successful focused checks
-for this exact head. Inspect actual commands, results and their coverage of the
-change, acceptance criteria and project/card requirements. Missing, unavailable,
-failing or insufficient required checks block approval, including any build or
-early full gate explicitly mandated by stricter instructions. The workflow does
-not otherwise require `commands.fullCheck` or a gate binding before review.
-Never use a partial or stale gate receipt as evidence of successful validation.
-Judge the accepted outcome and regressions introduced by this change. Cite the
-accepted criterion, applicable project rule, or previously working behavior for
-each blocker, and show the failure and its consequence. Pre-existing defects
-outside the change and extra acceptance criteria are optional feedback. An
-approval can end with zero findings and zero suggestions.
-For new evidence-required deliveries, inspect the raw focused bundles and their
-hashes using `delivery-evidence.mjs verify`. Review remains read-only: if another
-check is needed and the sandbox cannot retain its raw output, request that exact
-command from the orchestrator, then inspect the resulting clean-head capture.
-Do not substitute a tool-session identifier or a prose summary for durable logs.
-Return `scope: code_and_focused_checks`: this approves code and focused evidence,
-not the final gate or delivery. The orchestrator must obtain and verify the
-required gate on this exact base/head after all slots approve.
+Require successful focused checks on this exact head. Verify required raw
+bundles with `delivery-evidence.mjs verify`, and judge whether the evidence
+covers the actual change and its binding requirements. Reuse an existing test
+or smoke when it covers the case. Request another command only for a concrete
+gap or defect that needs proof. The orchestrator can capture that command
+when the reviewer cannot retain logs. The final gate belongs to the next phase.
 
-Review every file in the applicable diff on two axes:
+Use one pass to check whether the accepted outcome works and find regressions
+introduced by the diff. For a changed domain rule, follow the actual rule into
+affected calculations, explanations and proof. Expand the investigation only
+when the diff or evidence points to a material impact. Avoid folding unrelated
+cleanup, preferred designs, theoretical edge cases or duplicate tests into the
+review.
 
-1. **Spec:** missing/partial requirements, scope drift, behavior, edge cases, and
-   validation gaps. Reference the exact requirement.
-2. **Standards:** correctness, security, data integrity, concurrency, project
-   rules, architecture, regressions, and tests. Ignore tool-enforced style.
+For each blocker, name the scenario, the accepted requirement or existing
+behavior it violates, and the concrete consequence. A P2 requires a material
+defect or missing binding proof. Combine related defects that share a fix in
+one actionable finding. Return suggestions only when useful to the user.
+Approve immediately when the required evidence covers the accepted behavior
+and no blocker remains. Empty findings and suggestions are valid.
 
-For a changed domain rule, trace its authoritative source and applicability
-through calculation, user-visible explanation, documentation, and regression
-tests. Resolve contradictions across those surfaces; a correct numerical result
-alone does not establish a correct explanation. Read project review references
-named by its instructions. This is a judgement review, not a style checklist.
-
-Apply the delivery contract's blocking policy. Return only evidenced P0-P2
-blockers in `findings`, with tight file/line and a bounded correction or test.
-Put optional P2-P3 advice in `suggestions`. Approve when no blocker remains,
-including with suggestions or no remarks. Do not invent a quota.
-
-Return the exact-head review handoff from the delivery contract, echo the reviewer
-slot, and stop. Never edit, commit, rework, ship, or select another card.
+Return the exact-head handoff with `scope: code_and_focused_checks` and the
+reviewer slot. End the review there.

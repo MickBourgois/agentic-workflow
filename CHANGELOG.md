@@ -3,9 +3,11 @@
 ## 0.9.0
 
 - Start an executable Linear card directly with `/start-card`. Explicit
-  hardening resolves concrete gaps. Backlog automation keeps its readiness rules.
+  hardening preserves the card text and closes only blocking gaps.
+  Backlog automation keeps its readiness rules.
 - Limit new work to one automatic rework and two independent review rounds.
-  Existing deliveries keep their recorded limits.
+  Existing deliveries keep their recorded limits. Reviews focus on concrete
+  consequences of the diff and re-review focuses on the correction.
 - Reuse reviewed focused checks for eligible simple and standard work.
   Complex, critical and uncertain work requires a separate gate.
 - Schedule focused checks once on the clean commit where possible and apply

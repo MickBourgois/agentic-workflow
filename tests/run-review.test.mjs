@@ -2,6 +2,7 @@ import test from 'node:test'
 import assert from 'node:assert/strict'
 import { readFile, readdir, access, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { execFileSync } from 'node:child_process'
 import { writeDeliveryState } from '../workflow/orchestrator/delivery-state.mjs'
 import { reviewFixture } from './fixtures/review-fixture.mjs'
 
@@ -45,4 +46,32 @@ test('invalid slot and missing focused evidence block dispatch; mutation during 
   await f.fake({ dirty: true })
   await assert.rejects(f.run(), /dirty validation worktree/)
   assert.equal(await readFile(f.stateFile, 'utf8'), f.originalState)
+})
+
+test('a direct standard rework gives the fresh CLI reviewer only that slot’s validated prior finding', async () => {
+  const f = await reviewFixture({ complexity: 'standard', rework: true })
+  const prior = execFileSync('git', ['rev-parse', 'HEAD^'], { cwd: f.worktree, encoding: 'utf8' }).trim()
+  const finding = {
+    id: 'EXPECTED-BEHAVIOR', file: 'app.mjs', line: 1, requirement: 'Return two', priority: 'P2',
+    evidence: 'Returns three on import', required_change: 'Return two',
+  }
+  const previousReceipt = { ...f.candidate, reviewed_head: prior, status: 'findings', findings: [finding] }
+  f.state.previousReview = { base: f.base, head: prior, receipts: [
+    { ...previousReceipt, reviewer_slot: 'A', findings: [{ ...finding, id: 'PRIVATE-OTHER-SLOT' }] },
+    previousReceipt,
+  ] }
+  await writeDeliveryState(f.repo, f.state)
+  await f.fake()
+  const getPrompt = async () => {
+    const result = await f.run()
+    return JSON.parse(await readFile(join(result.runDir, 'observed.json'), 'utf8')).prompt
+  }
+  const incremental = await getPrompt()
+  assert.match(incremental, /EXPECTED-BEHAVIOR/)
+  assert.doesNotMatch(incremental, /PRIVATE-OTHER-SLOT/)
+  f.state.previousReview.head = f.base
+  await writeDeliveryState(f.repo, f.state)
+  const full = await getPrompt()
+  assert.match(full, /complete diff review of the card/)
+  assert.doesNotMatch(full, /EXPECTED-BEHAVIOR|PRIVATE-OTHER-SLOT/)
 })

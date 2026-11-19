@@ -5,24 +5,14 @@ clear. Use these prompts only for missing content. Reference applicable project
 rules instead of copying their checklists.
 
 ```markdown
-## Context
-<Current files, routes, schemas, tests, behavior owner, blast radius, pitfalls.>
+## Expected outcome
+<Observable behavior and the scope needed to understand it.>
 
-## Goal
-<One user-value sentence.>
+## Acceptance
+<The smallest observable cases needed to decide whether the change is done.>
 
-## Scope
-<The bounded change and expected modules.>
-
-## Out of scope
-<Adjacent work and tempting shortcuts excluded from this card.>
-
-## Acceptance criteria
-<Observable and verifiable statements.>
-
-## Validation
-<Observable evidence or the focused command when it matters to the outcome.
-For UI changes, give the browser action and expected result if necessary.>
+## Proof
+<A focused check or smoke if the way to verify acceptance is unclear.>
 ```
 
 Add `Risks / dependencies`, `Agent guardrails` or `Human validation required`

@@ -156,9 +156,10 @@ invalidates prior approvals; previous receipts are context, never approval of th
 new head.
 
 Keep settled scope/design decisions on re-review. New blockers require a concrete
-defect under the same policy, not a new preference. Preserve the rework counter
-on resume; after the configured limit return `NEEDS_HUMAN` with remaining
-blockers and decisions required.
+defect under the same policy. Batch confirmed defects into the one allowed
+correction. Preserve the rework counter on resume. At the limit, present the
+remaining blockers and proposed decision to the user. Any additional review
+or rework requires explicit human approval.
 
 ## 5. Dispatch shipping
 

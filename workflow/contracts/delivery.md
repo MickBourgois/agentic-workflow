@@ -124,9 +124,10 @@ and coverage. It cannot infer every project's required commands from a diff.
 Approve when the accepted scope works, required checks pass and no demonstrated
 defect remains. An empty review is valid; findings have no quota.
 
-- `findings` contains only blocking P0-P2 defects: incorrect behavior, a failed
-  acceptance criterion or required check, a credible security/data-loss risk, or
-  a violated applicable project rule. Cite the scenario or rule and its impact.
+- `findings` contains only blocking P0-P2 defects with concrete impact on the
+  accepted change: incorrect behavior, a regression, missing or failed required
+  proof, a credible security/data-loss risk, or violation of a binding project rule.
+  Cite the affected scenario and consequence. A P2 must meet the same standard.
 - `suggestions` contains optional P2-P3 advice: polish, preferences, alternative
   designs and additional coverage without a demonstrated gap. P3 never triggers
   rework. P0/P1 cannot be downgraded to suggestions.
@@ -188,8 +189,10 @@ node .agent-workflow/bin/run-review.mjs --repo <entry-repo> --card PROJ-123 --sl
 
 It reads the durable routing and frozen pair, checks review readiness, and starts
 a new direct read-only Codex exec without a shared daemon, with delegation disabled on the exact model
-and effort. It supplies only card, worktree, pair and slot; a full diff review
-keeps fallback input independent, including after rework. Availability errors,
+and effort. It supplies card, worktree, pair and slot. For a direct correction
+on a simple or standard card, it can also supply only that slot's validated
+prior findings. Use the complete diff when the correction or its impact is
+uncertain or sensitive. Availability errors,
 timeouts, waits without inspection, missing/invalid results, mismatched identity
 or changed delivery/worktree leave delivery state untouched and produce no
 accepted `receipt.json`. There is no model substitution or automatic approval.
