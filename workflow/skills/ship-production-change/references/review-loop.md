@@ -12,8 +12,8 @@ This gate begins only after adaptive independent review approves the exact head.
 - Pending or failed required checks are not green.
 - Wait for the repository's required PR checks. Those checks validate merge
   readiness. Scheduled jobs and post-deployment checks are separate workflows.
-- Reuse the workflow's independent review receipts. PR creation needs no new
-  automatic code review from a hosting integration.
+- Reuse the workflow's independent review receipts. Optional hosting reviews
+  may finish in parallel. Do not wait for them or request a repeat review.
 - Own the CI watch for this phase. Use event waits or the native required-check
   watcher described in the delivery contract; return changes and terminal evidence
   to the orchestrator without duplicate polling.
