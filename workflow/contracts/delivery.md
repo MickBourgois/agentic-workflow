@@ -19,19 +19,17 @@ READY -> IMPLEMENTING -> REVIEWING -> VALIDATING -> APPROVED -> SHIPPING -> DONE
                          REWORKING
 ```
 
-Any non-terminal state may move to `NEEDS_HUMAN` or `FAILED`. The default limit
-is two rework cycles and one model escalation; project config may lower or raise
-those numeric limits. A retry requires changed evidence. Repeating an unchanged
-operation is not a recovery strategy.
-
-Two reworks allow at most three review rounds. Critical slots A/B run concurrently
-within each round; they are not separate rework cycles. Preserve counters across
-resume. Reaching the limit requires human arbitration, not automatic acceptance.
+Any non-terminal state may move to `NEEDS_HUMAN` or `FAILED`. New deliveries
+allow at most one automatic rework and two rounds of review. Projects can set
+zero automatic reworks. The default model escalation limit is one. Critical slots
+A/B run concurrently within each round. Preserve recorded limits and counters
+on resume. Remaining blockers at the limit require a human decision. Retry
+only when evidence changes.
 
 ## Complexity classification
 
-Hardening assigns exactly one level. Apply critical overrides first, then score
-every non-critical dimension with evidence.
+Inline intake or explicit hardening assigns exactly one level. Apply critical
+overrides first, then score every non-critical dimension with evidence.
 
 ### Critical overrides
 
@@ -126,9 +124,10 @@ and coverage. It cannot infer every project's required commands from a diff.
 Approve when the accepted scope works, required checks pass and no demonstrated
 defect remains. An empty review is valid; findings have no quota.
 
-- `findings` contains only blocking P0-P2 defects: incorrect behavior, a failed
-  acceptance criterion or required check, a credible security/data-loss risk, or
-  a violated applicable project rule. Cite the scenario or rule and its impact.
+- `findings` contains only blocking P0-P2 defects with concrete impact on the
+  accepted change: incorrect behavior, a regression, missing or failed required
+  proof, a credible security/data-loss risk, or violation of a binding project rule.
+  Cite the affected scenario and consequence. A P2 must meet the same standard.
 - `suggestions` contains optional P2-P3 advice: polish, preferences, alternative
   designs and additional coverage without a demonstrated gap. P3 never triggers
   rework. P0/P1 cannot be downgraded to suggestions.
@@ -190,8 +189,10 @@ node .agent-workflow/bin/run-review.mjs --repo <entry-repo> --card PROJ-123 --sl
 
 It reads the durable routing and frozen pair, checks review readiness, and starts
 a new direct read-only Codex exec without a shared daemon, with delegation disabled on the exact model
-and effort. It supplies only card, worktree, pair and slot; a full diff review
-keeps fallback input independent, including after rework. Availability errors,
+and effort. It supplies card, worktree, pair and slot. For a direct correction
+on a simple or standard card, it can also supply only that slot's validated
+prior findings. Use the complete diff when the correction or its impact is
+uncertain or sensitive. Availability errors,
 timeouts, waits without inspection, missing/invalid results, mismatched identity
 or changed delivery/worktree leave delivery state untouched and produce no
 accepted `receipt.json`. There is no model substitution or automatic approval.
@@ -229,13 +230,18 @@ incident report; rotation needs the operator's authorization.
 `reviews_approved` takes all exact-head, scoped receipts and moves REVIEWING to
 VALIDATING. Missing slots, findings, stale heads or missing focused checks block
 that event. It preserves focused evidence separately as `focusedValidation`.
-Only then run the required project gate on the approved head and frozen base.
-Full is the default; project profiles retain the integration contract's explicit
-opt-in and tested fail-closed policy. Reuse an existing receipt only if it already
-meets that exact policy, pair and freshness requirements. Never rebind old or
-partial results to a new commit.
+Only then approve a passing gate for the approved head and frozen base. Full
+is the default for a separate gate. New simple or standard deliveries reuse
+approved focused checks when the evidence matches the exact pair, is fresh and
+covers the required local checks for the actual diff.
 
-`review_approved` now requires VALIDATING and a validation object:
+`review_approved` requires VALIDATING and either a validation object or
+`{"useReviewedFocused":true}` when the actual simple or standard change
+qualifies. The CLI derives the
+`reviewed-focused` gate from the stored hashed checks, then verifies the original
+focused bundles at approval, shipping and archival. It captures no new test run.
+
+For a separately executed gate, use this validation object:
 
 ```yaml
 kind: required_gate
@@ -256,10 +262,10 @@ The event verifies the project's binding when configured before entering
 APPROVED (delivery approval). Gate failure leaves VALIDATING, with no shipping
 authorization. `start_shipping` checks the same evidence again without rerunning
 the gate; with a verifier it also compares the saved binding/receipt hashes.
-Receipt expiry and project-specific freshness/coverage are enforced by the
-project verifier or, without one, the project's audited process. The CLI checks
-records and exact SHAs but does not execute tests or independently certify those
-records without a verifier. No generic time-to-live is imposed.
+Receipt expiry and project-specific coverage are enforced by the verifier or the
+project's audited process. The CLI checks the evidence and Git identity. If an
+approved reused proof expires before merge, a refresh requires a newly executed
+required gate or renewed validation and review under the project policy.
 
 Every new commit invalidates code approvals and gate evidence; a changed base
 invalidates the pair too. Unexpected Git changes require reconciliation and fresh
@@ -272,9 +278,9 @@ or state mismatches require a human. Keep approvals and gate status distinct.
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
 structured findings only. Output the new commit, findings addressed, focused
 validation, and unresolved blockers. Rework never runs the next review; the
-required project gate and exact-head binding remain mandatory before approval
-and shipping. Full is the default; a reduced profile requires explicit project
-mode and the tested, fail-closed impact policy in the integration contract.
+required gate remains mandatory before approval and shipping. Full is the default;
+either form of reduced gate requires a tested project policy as described in the
+integration contract.
 
 ### Shipping
 
@@ -309,8 +315,9 @@ helper preserves stdout/stderr and exit status in unique ignored private bundles
 under `.delivery/evidence/<CARD>/`, with timestamps, actual Git identity, dirty
 status, source/index fingerprint and SHA-256 file hashes. Source mutations during
 capture invalidate the result. A dirty precommit/red run can be retained but
-cannot establish passing focused/gate evidence for a commit. Run focused checks
-again on the committed clean head, without amending the commit afterward.
+cannot establish passing focused/gate evidence for a commit. Where project
+instructions permit it, run the focused handoff checks once on the committed clean
+head. Any later commit needs its own proof.
 
 Each validation check carries the helper's returned `command`, `exitCode` and
 `receipt`. New evidence-required states verify their card/base/head/kind, clean
@@ -346,8 +353,9 @@ hashes, even after worktree removal. Artifacts stay local and ignored. Use fixtu
 data; never pass secrets in command arguments or capture credentials/private
 production payloads. Inspect/redact material before sharing it externally.
 
-Hardening owns one tracker comment marked `<!-- delivery-routing:v1 -->`. It holds
-the classification evidence and exact route. Delivery owns one idempotent comment
+Inline intake or explicit hardening writes one tracker comment marked
+`<!-- delivery-routing:v1 -->`. It holds the classification evidence and exact
+route. Delivery owns one idempotent comment
 marked `<!-- delivery-checkpoint:v1 -->`. It holds state, branch/worktree hint,
 SHAs, cycles, receipts, PR, validation, escalation count, and next action.
 

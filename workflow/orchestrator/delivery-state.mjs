@@ -6,6 +6,7 @@ import { createHash, randomUUID } from 'node:crypto'
 import { basename, dirname, resolve, relative, isAbsolute, sep } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
+import { isDeepStrictEqual } from 'node:util'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
 import { assertCard, loadConfig } from './config.mjs'
 import { verifyEvidence } from './delivery-evidence.mjs'
@@ -70,7 +71,10 @@ export function createDeliveryState({
     dimensions,
     highEffort: isHighEffortComplex({ score, highEffort, dimensions }),
     route: routeFor(complexity, { score, highEffort, dimensions }),
-    policy: { maxReworkCycles, maxEscalations, completionCheck, validationMode },
+    policy: {
+      maxReworkCycles: Math.min(maxReworkCycles, WORKFLOW_DEFAULTS.delivery.maxReworkCycles),
+      maxEscalations, completionCheck, validationMode,
+    },
     baseSha,
     currentHead: null,
     branch,
@@ -151,13 +155,32 @@ function validateChecks(checks) {
   'successful recorded focused or gate checks required')
 }
 
+function reviewedFocusedGate(state) {
+  assert(state.policy?.reuseFocusedChecks === true && state.policy.evidenceRequired === true
+    && ['simple', 'standard'].includes(state.complexity), 'reviewed focused gate not permitted for this delivery')
+  const focused = state.focusedValidation
+  validateFocused(focused, state.currentHead)
+  assert(focused.checks.every((check) => check.receipt && check.receiptSha256), 'verified focused receipts required')
+  return {
+    kind: 'required_gate', result: 'passed', base: state.baseSha, head: state.currentHead,
+    profile: 'reviewed-focused', reason: 'Project policy permits reusing the independently reviewed focused checks',
+    checks: focused.checks, receipt: focused.checks[0].receipt,
+  }
+}
+
 function validateGate(state, validation) {
   assert(validation?.kind === 'required_gate' && validation.result === 'passed'
     && validation.head === state.currentHead && validation.base === state.baseSha,
   'passing required gate for exact base/head required')
   assert(typeof validation.profile === 'string' && validation.profile.trim()
     && typeof validation.reason === 'string' && validation.reason.trim(), 'gate profile and reason required')
-  assert(state.policy?.validationMode === 'project' || validation.profile === 'full', 'full gate required')
+  if (validation.profile === 'reviewed-focused') {
+    assert(isDeepStrictEqual(validation, reviewedFocusedGate(state)), 'gate must match the reviewed focused evidence')
+  } else {
+    const projectProfile = state.policy?.validationMode === 'project'
+      && !(state.policy.reuseFocusedChecks && state.complexity === 'critical')
+    assert(projectProfile || validation.profile === 'full', 'full gate required')
+  }
   validateChecks(validation.checks)
   assert(typeof validation.receipt === 'string' && validation.receipt.trim(), 'auditable gate receipt required')
 }
@@ -179,7 +202,8 @@ export function transitionDeliveryState(current, event, payload = {}) {
   assert(!TERMINAL_STATES.has(current.state), `terminal state ${current.state} cannot transition`)
   const state = copy(current)
   const from = state.state
-  const maxReworkCycles = state.policy?.maxReworkCycles ?? WORKFLOW_DEFAULTS.delivery.maxReworkCycles
+  // Historical states without a recorded limit used two reworks.
+  const maxReworkCycles = state.policy?.maxReworkCycles ?? 2
   const maxEscalations = state.policy?.maxEscalations ?? WORKFLOW_DEFAULTS.delivery.maxEscalations
 
   switch (event) {
@@ -207,14 +231,19 @@ export function transitionDeliveryState(current, event, payload = {}) {
       state.version = DELIVERY_STATE_VERSION
       state.state = 'VALIDATING'
       break
-    case 'review_approved':
+    case 'review_approved': {
       requireState(state, 'VALIDATING', event)
       validateReviewReceipts(state, state.reviewReceipts)
       assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
-      validateGate(state, payload.validation)
-      state.validation = payload.validation
+      const reuse = payload.useReviewedFocused === true
+      assert(!reuse || payload.validation === undefined, 'choose either reviewed focused checks or a separate gate')
+      assert(payload.validation?.profile !== 'reviewed-focused', 'request focused reuse explicitly')
+      const validation = reuse ? reviewedFocusedGate(state) : payload.validation
+      validateGate(state, validation)
+      state.validation = validation
       state.state = 'APPROVED'
       break
+    }
     case 'review_findings': {
       requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
@@ -256,6 +285,7 @@ export function transitionDeliveryState(current, event, payload = {}) {
       assert(['APPROVED', 'SHIPPING'].includes(state.state), 'validation_refreshed requires APPROVED or SHIPPING')
       validateReviewReceipts(state, state.reviewReceipts, state.version === 1)
       assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      assert(payload.validation?.profile !== 'reviewed-focused', 'refresh requires a newly executed gate')
       validateGate(state, payload.validation)
       state.validation = payload.validation
       break
@@ -263,6 +293,10 @@ export function transitionDeliveryState(current, event, payload = {}) {
       requireState(state, 'APPROVED', event)
       validateReviewReceipts(state, state.reviewReceipts, state.version === 1)
       assert(state.reviewReceipts.every((receipt) => receipt.status === 'approved'), 'all reviews must approve')
+      if (state.validation?.profile === 'reviewed-focused' || payload.validation?.profile === 'reviewed-focused') {
+        assert(payload.validation === undefined || isDeepStrictEqual(payload.validation, state.validation),
+          'shipping must use the already approved gate')
+      }
       validateGate(state, payload.validation ?? state.validation)
       state.validation = payload.validation ?? state.validation
       state.state = 'SHIPPING'
@@ -520,6 +554,7 @@ async function main() {
     checkPreparedWorktree(repoRoot, state)
     state.worktree = realpathSync(state.worktree)
     state.policy.evidenceRequired = true
+    state.policy.reuseFocusedChecks = true
     await writeDeliveryState(repoRoot, state, { exclusive: true })
     process.stdout.write(`${JSON.stringify(state)}\n`)
     return
@@ -559,8 +594,15 @@ async function main() {
     if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
       if (flags.event === 'review_approved') requireState(current, 'VALIDATING', flags.event)
       current.policy.validationMode = config.delivery.validationMode
-      checkRecordedEvidence(current, payload.validation ?? current.validation, 'gate')
-      if (config.commands.validationProof) {
+      const validation = payload.validation ?? current.validation
+      const reusesFocusedChecks = (flags.event === 'review_approved' && payload.useReviewedFocused === true)
+        || validation?.profile === 'reviewed-focused'
+      if (reusesFocusedChecks) {
+        checkRecordedEvidence(current, current.focusedValidation, 'focused')
+      } else {
+        checkRecordedEvidence(current, validation, 'gate')
+      }
+      if (config.commands.validationProof && !reusesFocusedChecks) {
         const verified = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
         if (flags.event === 'start_shipping') {
           assert(current.validation?.bindingSha256 === verified.bindingSha256
@@ -579,7 +621,9 @@ async function main() {
       const archiveLocation = relative(resolve(current.worktree), payload.evidenceArchive)
       assert(archiveLocation === '..' || archiveLocation.startsWith(`..${sep}`) || isAbsolute(archiveLocation), 'evidence archive must survive worktree removal')
       checkRecordedEvidence(current, current.focusedValidation, 'focused', payload.evidenceArchive)
-      checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
+      if (current.validation.profile !== 'reviewed-focused') {
+        checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
+      }
     }
     const next = transitionDeliveryState(current, flags.event, payload)
     if (payload.evidenceArchive) next.evidenceArchive = payload.evidenceArchive

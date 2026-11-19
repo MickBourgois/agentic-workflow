@@ -1,28 +1,18 @@
 # Hardened Card Template
 
-Use these core sections. Keep detail proportional to the changed behavior and
-reuse applicable project rules by reference instead of copying their checklists.
+Keep the card's existing structure when the outcome and how to verify it are
+clear. Use these prompts only for missing content. Reference applicable project
+rules instead of copying their checklists.
 
 ```markdown
-## Context
-<Current files, routes, schemas, tests, behavior owner, blast radius, pitfalls.>
+## Expected outcome
+<Observable behavior and the scope needed to understand it.>
 
-## Goal
-<One user-value sentence.>
+## Acceptance
+<The smallest observable cases needed to decide whether the change is done.>
 
-## Scope
-<The bounded change and expected modules.>
-
-## Out of scope
-<Adjacent work and tempting shortcuts excluded from this card.>
-
-## Acceptance criteria
-<Observable and verifiable statements.>
-
-## Validation
-<Exact focused commands, relevant lint/types, named regression proof or practical
-alternative, and the required final gate. For UI changes, include concrete
-browser actions and expected results.>
+## Proof
+<A focused check or smoke if the way to verify acceptance is unclear.>
 ```
 
 Add `Risks / dependencies`, `Agent guardrails` or `Human validation required`

@@ -6,7 +6,7 @@ import { join, resolve } from 'node:path'
 import { createDeliveryState, transitionDeliveryState, writeDeliveryState } from '../../workflow/orchestrator/delivery-state.mjs'
 import { runReview } from '../../workflow/orchestrator/run-review.mjs'
 
-export async function reviewFixture({ install = false } = {}) {
+export async function reviewFixture({ install = false, complexity = 'critical', rework = false } = {}) {
   const root = await mkdtemp(join(tmpdir(), 'workflow-review-')), repo = join(root, 'repo'), worktree = join(root, 'worktree')
   await mkdir(repo)
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
@@ -21,6 +21,10 @@ export async function reviewFixture({ install = false } = {}) {
   git('add', '.'); git('commit', '-m', 'base')
   const base = git('rev-parse', 'HEAD'), card = 'PROJ-801', branch = 'fix/proj-801'
   git('worktree', 'add', '-b', branch, worktree, base)
+  if (rework) {
+    await writeFile(join(worktree, 'app.mjs'), 'export const value = 3\n')
+    execFileSync('git', ['commit', '-am', 'PROJ-801 initial change'], { cwd: worktree, stdio: 'pipe' })
+  }
   await writeFile(join(worktree, 'app.mjs'), 'export const value = 2\n')
   execFileSync('git', ['add', 'app.mjs'], { cwd: worktree })
   execFileSync('git', ['commit', '-m', 'PROJ-801 change'], { cwd: worktree, stdio: 'pipe' })
@@ -29,7 +33,7 @@ export async function reviewFixture({ install = false } = {}) {
     '--repo', worktree, '--card', card, '--base', base, '--head', head, '--kind', 'focused', '--', process.execPath, '--input-type=module', '-e', "import {value} from './app.mjs'; if (value !== 2) process.exit(1)"], { encoding: 'utf8' })
   assert.equal(proof.status, 0, proof.stderr)
   const captured = JSON.parse(proof.stdout)
-  let state = createDeliveryState({ card, complexity: 'critical', baseSha: base, branch, worktree })
+  let state = createDeliveryState({ card, complexity, baseSha: base, branch, worktree })
   state.policy.evidenceRequired = true
   state = transitionDeliveryState(state, 'start_implementation')
   state = transitionDeliveryState(state, 'implementation_complete', { commit: head, validation: {
@@ -38,16 +42,19 @@ export async function reviewFixture({ install = false } = {}) {
   await writeDeliveryState(repo, state)
   const stateFile = join(repo, '.delivery/state', `${card}.json`)
   const originalState = await readFile(stateFile, 'utf8')
-  const candidate = { card, reviewed_base: base, reviewed_head: head, reviewer_slot: 'B',
+  const slot = complexity === 'critical' ? 'B' : 'single'
+  const candidate = { card, reviewed_base: base, reviewed_head: head, reviewer_slot: slot,
     scope: 'code_and_focused_checks', status: 'approved', inspected_files: ['app.mjs'], findings: [], suggestions: [] }
   const cli = join(root, 'fake-codex.mjs')
   const fake = async ({ receipt = candidate, exit = 0, inspection = true, stall = false, dirty = false } = {}) => {
     await writeFile(cli, `#!/usr/bin/env node
 import { writeFileSync } from 'node:fs';
 const args = process.argv.slice(2), file = args[args.indexOf('--output-last-message') + 1];
-writeFileSync(file.replace('result.json', 'observed.json'), JSON.stringify({args}));
-process.stdin.resume();
+let prompt = '';
+process.stdin.setEncoding('utf8');
+process.stdin.on('data', (chunk) => { prompt += chunk; });
 process.stdin.on('end', () => {
+  writeFileSync(file.replace('result.json', 'observed.json'), JSON.stringify({args, prompt}));
   ${inspection ? `console.log(JSON.stringify({type:'item.completed',item:{type:'command_execution',exit_code:0}}));` : ''}
   ${receipt === null ? '' : `writeFileSync(file, ${JSON.stringify(JSON.stringify(receipt))});`}
   ${dirty ? `writeFileSync('app.mjs', 'changed during review');` : ''}
@@ -55,6 +62,6 @@ process.stdin.on('end', () => {
 });
 `, { mode: 0o700 })
   }
-  const run = (extra = {}) => runReview({ repoRoot: repo, card, slot: 'B', codexBin: cli, timeoutMs: 5_000, ...extra })
+  const run = (extra = {}) => runReview({ repoRoot: repo, card, slot, codexBin: cli, timeoutMs: 5_000, ...extra })
   return { root, repo, worktree, card, base, head, state, stateFile, originalState, candidate, cli, fake, run }
 }

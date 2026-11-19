@@ -49,6 +49,25 @@ test('website reflects the canonical version, routed models, and critical review
   assert.ok(html.includes('Deux approbations indépendantes requises'))
 })
 
+test('documents direct start, review limits, CI stages, and worktree cleanup', async () => {
+  const output = await mkdtemp(join(tmpdir(), 'workflow-website-delivery-'))
+  await buildSite({ output })
+  const [home, installation, workflow, skills] = await Promise.all([
+    'index.html', 'docs/installation/index.html', 'docs/workflow/index.html', 'docs/skills/index.html',
+  ].map((path) => readFile(join(output, path), 'utf8')))
+
+  assert.match(home, /01 \/ START/)
+  assert.match(home, /Hardening facultatif/)
+  assert.match(installation, /<code>\/start-card PROJ-123<\/code>/)
+  assert.match(installation, /hardened.*ready-for-agent.*sélection automatique du backlog/)
+  assert.match(workflow, /au plus <strong>deux tours de revue<\/strong>/)
+  assert.match(workflow, /<code>reviewed-focused<\/code>/)
+  assert.match(workflow, /Après fusion.*Exécution planifiée ou manuelle/s)
+  assert.match(workflow, /\.delivery\/archives\/.+git worktree remove/s)
+  assert.match(skills, /id="harden-card"[^>]*>.*?<strong>Facultatif<\/strong>/s)
+  assert.match(skills, /id="code-review"[^>]*>.*?<strong>Obligatoire<\/strong>/s)
+})
+
 test('base-path validation rejects unsafe interpolation', () => {
   assert.equal(normalizeBasePath('agentic-workflow/'), '/agentic-workflow')
   assert.equal(normalizeBasePath('/'), '')

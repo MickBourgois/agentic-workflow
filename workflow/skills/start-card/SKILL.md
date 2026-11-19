@@ -1,6 +1,6 @@
 ---
 name: start-card
-description: Orchestrate one hardened card through fresh implementation, adaptive review, bounded rework, and shipping contexts.
+description: Start or resume one explicit card through readiness, fresh implementation, independent review, and shipping.
 disable-model-invocation: true
 ---
 
@@ -8,7 +8,8 @@ disable-model-invocation: true
 
 You are the card orchestrator, not an implementer. Read project instructions,
 `agent-workflow.config.json`, `.agent-workflow/contracts/delivery.md`, and
-`.agent-workflow/contracts/tracker-linear.md` completely.
+`.agent-workflow/contracts/tracker-linear.md`. Read effective settings using
+`node .agent-workflow/bin/agent-workflow.mjs config`.
 
 An explicit card ID is mandatory. Never query the backlog for another card.
 
@@ -16,13 +17,14 @@ An explicit card ID is mandatory. Never query the backlog for another card.
 
 1. Require configured tracker team and Linear issue CRUD before changing Git.
 2. Fetch the full card, relations, labels, comments, and status.
-3. Require configured hardened/ready labels, zero open blockers, and one valid
-   `delivery-routing:v1` comment. Missing or contradictory routing is
-   `needs_human`; direct the user to `/harden-card`.
-4. Validate routing against the installed engine. Find any marked checkpoint and
-   `.delivery/state/<CARD>.json`; reconcile both with live Git, PR, CI, and merge
-   evidence.
-5. Return an existing terminal result immediately.
+3. Find any marked checkpoint and `.delivery/state/<CARD>.json`. Reconcile
+   existing deliveries with their saved routing/limits and live Git, PR, CI,
+   and merge evidence. Return an existing terminal result immediately. Treat an
+   existing checkpoint with missing local state as a recovery case.
+4. For a new delivery, require zero open native blockers, no needs-info or
+   other project execution hold, and the configured ready or backlog state.
+5. Reuse an existing valid route if its scope/risk still matches. Contradictory,
+   duplicate, or stale routing requires reconciliation before execution.
 
 ## 2. Prepare or resume isolation
 
@@ -30,6 +32,15 @@ One card owns one branch, worktree, and PR.
 
 - Inspect `git worktree list`; preserve dirty, active, or unmerged worktrees.
 - Fetch the configured remote/base and require a clean, uncontaminated base.
+- Before creating a worktree for a new inline delivery, read the relevant code
+  on that base. Verify the intended outcome and how it can be observed, check
+  that this is one reviewable change, and look for critical overrides. Use
+  accepted criteria, referenced specifications and actual project rules.
+  Preserve the card wording and ask only about a decision that blocks execution.
+  Return `needs_human` with the specific gap if readiness or scope is unclear.
+  `/harden-card` is available for deliberate refinement. For a card without
+  routing, classify using the delivery contract and resolve the route with the
+  installed engine. Keep evidence brief for zero-score dimensions.
 - Create/resume under configured `worktree.root` using the configured branch
   pattern. Resume durable state instead of duplicating it.
 - Stop immediately on preparation failure. Do not initialize local/tracker state,
@@ -40,7 +51,10 @@ One card owns one branch, worktree, and PR.
 - Run the detected/configured install command when present.
 - Copy only file names listed in `environment.copyFiles`, without printing
   contents. Surface configured safety warnings before mutable smokes.
-- After all preparation succeeds, use `delivery-state.mjs init` with explicit
+- After all preparation succeeds, persist and reread one marked
+  `delivery-routing:v1` comment when new routing is needed. Follow the tracker
+  contract; inline intake needs no hardened label or card description edit.
+  Use `delivery-state.mjs init` with explicit
   worktree, branch and full base SHA. Init refuses an existing state/checkpoint;
   resume instead. Only after successful init may the workflow transition to
   IMPLEMENTING, update this card's tracker status and publish its checkpoint.
@@ -91,10 +105,17 @@ If every required receipt approves the current head, record `reviews_approved`
 with those receipts, moving `REVIEWING -> VALIDATING`. This is code approval
 only: shipping is still forbidden. Sanitize the shared checkpoint in VALIDATING
 too; reviewer receipts remain in local state until delivery approval.
-Run the configured
-`commands.fullCheck` on that exact head unless fresh auditable evidence of the
-required project validation already exists. With `delivery.validationMode: full`,
-this must be the full gate. With explicit `project` mode, the project's tested,
+For a new simple or standard delivery, reuse the exact focused proofs accepted
+by all reviewers as the local gate when they cover the actual diff and its
+required checks. Require fresh raw evidence, known impact, and the absence of any
+sensitive, uncertain or additional gate requirement. Use `review_approved`
+with `{ "useReviewedFocused": true }`; the CLI re-verifies the existing receipts.
+Required PR CI and deployment checks still apply. When any eligibility check
+fails or the saved delivery predates this profile, run the required gate below.
+
+Run the configured `commands.fullCheck` on the exact head unless fresh auditable
+evidence of the required gate already exists. In `delivery.validationMode: full`,
+execute the full gate. With explicit `project` mode, the project's tested,
 fail-closed impact policy may select a reduced gate; missing, stale, ambiguous,
 or sensitive impact requires the full gate. Record `validation.kind: required_gate`,
 `result: passed`, frozen `base`, approved `head`, selected `profile`, policy
@@ -121,7 +142,8 @@ requirement)`. The `review_findings` payload must cover every reviewed blocker
 exactly once; reconcile unsupported findings with the reviewer or a human rather
 than silently dropping them. Record optional `suggestions` without forcing a
 cycle or creating tickets automatically. Conflicting reviews need a human.
-Within the configured rework limit, move the card to rework, spawn a
+New deliveries allow at most one automated correction and two review rounds.
+Within the recorded rework limit, move the card to rework, spawn a
 fresh `reworker` with confirmed findings only and require a new commit. Review
 the new head independently in each required slot. After a bounded correction,
 use the local state `previousReview` to pass each slot only its own previous
@@ -134,9 +156,10 @@ invalidates prior approvals; previous receipts are context, never approval of th
 new head.
 
 Keep settled scope/design decisions on re-review. New blockers require a concrete
-defect under the same policy, not a new preference. Preserve the rework counter
-on resume; after the configured limit return `NEEDS_HUMAN` with remaining
-blockers and decisions required.
+defect under the same policy. Batch confirmed defects into the one allowed
+correction. Preserve the rework counter on resume. At the limit, present the
+remaining blockers and proposed decision to the user. Any additional review
+or rework requires explicit human approval.
 
 ## 5. Dispatch shipping
 

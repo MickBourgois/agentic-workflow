@@ -22,16 +22,51 @@ labels, environment files that a worktree may copy, and project-specific safety
 warnings. Environment file names may be configured; their contents are never
 copied into the workflow source, manifest, logs, or reports.
 
+Use the installed workflow for readiness, routing, review, rework and shipping.
+Project instructions supply domain rules, test commands and deployment facts.
+An explicitly selected executable card starts directly. Unattended backlog
+selection uses readiness labels and a recorded route.
+
 `delivery.validationMode` defaults to `full`. Projects may explicitly set it to
 `project` only when `commands.fullCheck` executes a documented, tested impact
 policy that records profile, reason, base, head and executed checks and falls
-back to full for missing, ambiguous or sensitive coverage. Project CI and proof
-verification must enforce the same policy; otherwise retain `full` mode. The
-legacy command key is retained for compatibility.
+back to full for missing, ambiguous or sensitive coverage. The proof verifier
+enforces the local gate policy. PR CI applies the same risk criteria to choose
+its focused checks. The legacy command key is retained for compatibility.
+
+New simple or standard deliveries reuse accepted focused checks when the
+actual diff has known impact and the checks satisfy the local proof. Uncertain,
+sensitive, complex and critical changes need a separate gate. Require the full
+gate for critical work. The CLI verifies the same raw evidence for the Git pair.
+A project verifier still handles separately executed gates. Completion hooks
+must handle the `reviewed-focused` profile and rely on the canonical archive
+verification for those receipts.
+
+## Continuous integration and deployment
+
+| Trigger | Result | Role in shipping |
+| --- | --- | --- |
+| PR opened or updated | Stable required job with fast quality checks and core product tests. Include targeted real tests when a changed sensitive contract needs them. | Required before protected merge. |
+| Production branch deployment | One deployment of the merge commit and a safe smoke after the provider reports it ready. | Required before `DONE` for deploying projects. |
+| Default branch schedule or manual dispatch | Broad regression suite on a recorded revision using isolated fixtures. Surface failures in CI. | Outside individual deliveries. |
+
+Select PR coverage inside the required job and cancel superseded runs for the
+same PR. Keep broad browser and integration regressions on the schedule.
+Prefer isolated unit tests and doubles for fast PR coverage and exercise actual
+boundaries where a double cannot prove the behavior. Use bounded waits and fail
+on the first failed test execution. Make automated hosting reviews advisory
+and keep them outside the wait for required checks. Use one deployment owner.
+When the hosting platform deploys the production branch automatically, verify
+its deployment for the merge commit.
+A successful smoke run for that commit can supply the shipper's proof.
+A scheduled regression run tests a Git revision. A production smoke checks
+what the provider serves for that deployment.
+
+## Evidence hooks
 
 Optional project Node entry points in `commands`:
 
-- `validationProof`: binds/verifies the project's immutable validation receipt
+- `validationProof`: binds/verifies the project's separately executed gate receipt
   against an explicit base/head. It is not required for initial or rework code
   reviews. After all `reviews_approved` receipts move the delivery to VALIDATING,
   the orchestrator runs the required gate and binds its immutable receipt.

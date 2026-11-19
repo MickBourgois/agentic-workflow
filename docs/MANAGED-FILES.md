@@ -25,7 +25,7 @@ To resolve a conflict:
 Obsolete pristine files move to `.agent-workflow/backups/<run>/...`; they are not
 permanently deleted by the updater.
 
-## Preparing and consuming 0.8.2
+## Updating a consumer to 0.9.0
 
 `VERSION`, `package.json` and `package-lock.json` carry the source version. There
 is no committed distribution manifest: `buildPayload()` enumerates canonical
@@ -33,13 +33,13 @@ files and install/update computes the installed manifest and SHA-256 hashes from
 their actual bytes. The website build reads VERSION and is generated/ignored.
 Do not commit temporary consumer copies or their manifests into the source.
 
-For a consumer such as Cockpit Egeiro (after 0.8.2 is reviewed and available):
+For a consumer after 0.9.0 is reviewed and available:
 
 1. Inspect consumer instructions, Git status, active deliveries and local workflow
    edits. Use an isolated consumer update branch/worktree. Do not resume an old
    delivery with new semantics until the delivery contract's legacy rules have
    been checked; preserve its runtime files and tracker evidence.
-2. Pull this source checkout, select the reviewed 0.8.2 commit/tag, verify VERSION
+2. Pull this source checkout, select the reviewed 0.9.0 commit/tag, verify VERSION
    and source checks, then run `./update.sh <consumer-worktree-root>` from it.
    No tag is created by preparing this version.
 3. Exit 2 means conflicts: compare the preserved managed file and incoming
@@ -47,8 +47,9 @@ For a consumer such as Cockpit Egeiro (after 0.8.2 is reviewed and available):
    old/new runtime. Config and project instructions stay project-owned.
 4. Verify `.agent-workflow/VERSION`, manifest `installedVersion`, no conflicts,
    and each installed file's SHA-256 against `managedSha256`/`sourceSha256`.
-   Inspect changes to skills, runtime and contracts together. Do not change
-   the project's validation mode or verifier just to adopt the new ordering.
+   Inspect changes to skills, runtime and contracts together. Reconcile local
+   instructions and CI with the integration contract. Keep project-specific
+   test commands and adapt completion hooks for reviewed focused evidence.
 5. Run consumer-mandated validation/build and explicitly stage only the managed
    changes and intended ignore/config edits. Review and deliver the consumer PR
    according to its own CI, human authorization and deployment rules.

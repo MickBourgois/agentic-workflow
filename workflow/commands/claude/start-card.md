@@ -1,5 +1,5 @@
 ---
-description: Orchestrate one hardened card through implementation, review, rework, and shipping.
+description: Start or resume one explicit card through readiness, implementation, review, and shipping.
 argument-hint: <CARD-ID>
 ---
 

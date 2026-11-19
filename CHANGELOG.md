@@ -1,5 +1,20 @@
 # Changelog
 
+## 0.9.0
+
+- Start an executable Linear card directly with `/start-card`. Explicit
+  hardening preserves the card text and closes only blocking gaps.
+  Backlog automation keeps its readiness rules.
+- Limit new work to one automatic rework and two independent review rounds.
+  Existing deliveries keep their recorded limits. Reviews focus on concrete
+  consequences of the diff and re-review focuses on the correction.
+- Reuse reviewed focused checks for eligible simple and standard work.
+  Complex, critical and uncertain work requires a separate gate.
+- Schedule focused checks once on the clean commit where possible and apply
+  red/green testing when the changed behavior or an explicit requirement calls for it.
+- Give PR CI, post-merge deployment checks, and scheduled regressions distinct
+  responsibilities.
+
 ## 0.8.2 (2026-11-18)
 
 - Add an exact-route direct CLI review runner with delegation disabled, private

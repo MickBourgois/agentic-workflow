@@ -32,12 +32,12 @@ approvals or unrecoverable proof requires human reconciliation.
    and record `validation_refreshed` before shipping. Set the frozen base; bind the
    successful immutable required-gate receipt to the approved head with
    `commands.validationProof` when configured, then verify it. Otherwise record
-   auditable project evidence for the approved head. Never accept focused proof or a
-   binding from an earlier head. Default `delivery.validationMode: full` requires
-   the full gate. Explicit `project` mode permits only a reduced profile selected
-   by the project's tested fail-closed impact policy; otherwise require full.
-   Record the required-gate fields from the delivery contract. Focused evidence
-   never substitutes for the final gate, even without `validationProof`.
+   auditable project evidence for the approved head. The only focused gate is
+   the existing `reviewed-focused` approval derived by the CLI for eligible
+   changes. Reverify it without reclassifying or replaying checks.
+   Otherwise use the full gate or a profile selected by the tested project
+   policy, with binding when configured. All evidence must match the approved
+   base/head.
    Run remaining card-specific release, migration,
    and security gates; preserve raw receipts.
 3. Failed gates stop. Shipping does not edit application code.
@@ -51,7 +51,8 @@ linked PR; reflect configured review/rework/merging statuses; wait for required 
 respect branch protection and recorded authorization for destructive or sensitive
 rollouts. Immediately before merge, recheck head/base, CI, approvals, threads,
 and mergeability. Confirm merge on the configured base and required deployment/
-safe-smoke proof before setting the card to done.
+safe-smoke proof before setting the card to done. Keep scheduled regression
+results outside this delivery's wait.
 
 ## Cleanup
 
