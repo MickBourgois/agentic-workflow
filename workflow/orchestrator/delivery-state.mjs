@@ -9,7 +9,7 @@ import { execFileSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
 import { assertCard, loadConfig } from './config.mjs'
-import { verifyEvidence } from './delivery-evidence.mjs'
+import { evidenceSnapshot, verifyEvidence, verifyFailedGateEvidence } from './delivery-evidence.mjs'
 
 export const DELIVERY_STATE_VERSION = 2
 export const TERMINAL_STATES = new Set(['DONE', 'NEEDS_HUMAN', 'FAILED'])
@@ -156,6 +156,8 @@ function validateChecks(checks) {
 }
 
 function reviewedFocusedGate(state) {
+  assert(!state.gateFailures?.length, 'failed gate recovery requires a new full gate')
+  assert(!state.reworkAuthorizations?.length, 'human-authorized rework requires a new full gate')
   assert(state.policy?.reuseFocusedChecks === true && state.policy.evidenceRequired === true
     && ['simple', 'standard'].includes(state.complexity), 'reviewed focused gate not permitted for this delivery')
   const focused = state.focusedValidation
@@ -174,6 +176,8 @@ function validateGate(state, validation) {
   'passing required gate for exact base/head required')
   assert(typeof validation.profile === 'string' && validation.profile.trim()
     && typeof validation.reason === 'string' && validation.reason.trim(), 'gate profile and reason required')
+  assert(!state.gateFailures?.length || validation.profile === 'full', 'failed gate recovery requires a new full gate')
+  assert(!state.reworkAuthorizations?.length || validation.profile === 'full', 'human-authorized rework requires a new full gate')
   if (validation.profile === 'reviewed-focused') {
     assert(isDeepStrictEqual(validation, reviewedFocusedGate(state)), 'gate must match the reviewed focused evidence')
   } else {
@@ -197,13 +201,36 @@ function nextActionForState(state) {
   }[state] ?? 'stop'
 }
 
+function reworkLimit(state) {
+  // Historical states without a recorded limit used two reworks.
+  return (state.policy?.maxReworkCycles ?? 2) + (state.reworkAuthorizations?.length ?? 0)
+}
+
+function authorizeAdditionalRework(state, authorization, event) {
+  if (authorization === undefined) return
+  assert(authorization && typeof authorization === 'object' && !Array.isArray(authorization)
+    && authorization.additionalCycles === 1
+    && ['reference', 'reason'].every(key => typeof authorization[key] === 'string' && authorization[key].trim()),
+  'reworkAuthorization requires explicit human reference, reason and additionalCycles: 1')
+  assert(state.policy?.evidenceRequired === true,
+    'additional rework authorization requires a recorded raw evidence policy; human reconciliation required')
+  const previousLimit = reworkLimit(state)
+  assert(['REVIEWING', 'VALIDATING'].includes(state.state) && state.reworkCycles === previousLimit,
+    'additional rework authorization requires the current rework limit to be reached in REVIEWING or VALIDATING')
+  state.reworkAuthorizations = [...(state.reworkAuthorizations ?? []), {
+    reference: authorization.reference, reason: authorization.reason, additionalCycles: 1,
+    previousLimit, newLimit: previousLimit + 1, reworkCycles: state.reworkCycles,
+    base: state.baseSha, head: state.currentHead, event, at: new Date().toISOString(),
+  }]
+}
+
 export function transitionDeliveryState(current, event, payload = {}) {
   assert([1, DELIVERY_STATE_VERSION].includes(current.version), 'unsupported delivery state version; needs human reconciliation')
-  assert(!TERMINAL_STATES.has(current.state), `terminal state ${current.state} cannot transition`)
+  assert(!TERMINAL_STATES.has(current.state) || (current.state === 'NEEDS_HUMAN' && event === 'gate_findings'),
+    `terminal state ${current.state} cannot transition`)
   const state = copy(current)
   const from = state.state
-  // Historical states without a recorded limit used two reworks.
-  const maxReworkCycles = state.policy?.maxReworkCycles ?? 2
+  const maxReworkCycles = reworkLimit(state)
   const maxEscalations = state.policy?.maxEscalations ?? WORKFLOW_DEFAULTS.delivery.maxEscalations
 
   switch (event) {
@@ -244,10 +271,19 @@ export function transitionDeliveryState(current, event, payload = {}) {
       state.state = 'APPROVED'
       break
     }
+    case 'gate_findings':
     case 'review_findings': {
-      requireState(state, 'REVIEWING', event)
+      if (event === 'gate_findings') {
+        const recovery = checkGateFindings(state, payload)
+        assert(state.state !== 'NEEDS_HUMAN' || state.reworkCycles < maxReworkCycles, 'rework limit prevents human gate recovery')
+        state.gateFailures = [...(state.gateFailures ?? []), recovery]
+        state.validation = recovery.validation
+        delete state.reason
+      } else requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
-      validateFocused(state.validation, state.currentHead)
+      assert(payload.receipts.every(receipt => (receipt.reviewed_base === undefined || receipt.reviewed_base === state.baseSha)
+        && (receipt.card === undefined || receipt.card === state.card)), 'review findings pair/card mismatch')
+      validateFocused(event === 'gate_findings' ? state.focusedValidation : state.validation, state.currentHead)
       assert(payload.receipts.some((receipt) => receipt.status === 'findings'), 'findings receipt required')
       validateBlockingFindings(payload.findings)
       const findingKey = (finding) => JSON.stringify([finding.file, finding.line, finding.requirement])
@@ -255,9 +291,10 @@ export function transitionDeliveryState(current, event, payload = {}) {
       const actualFindings = new Set(payload.findings.map(findingKey))
       assert(actualFindings.size === payload.findings.length && actualFindings.size === expectedFindings.size
         && [...actualFindings].every((key) => expectedFindings.has(key)), 'confirmed findings must cover all reviewed blockers exactly once')
+      authorizeAdditionalRework(state, payload.reworkAuthorization, event)
       state.reviewReceipts = payload.receipts
       state.findings = payload.findings
-      if (state.reworkCycles >= maxReworkCycles) {
+      if (state.reworkCycles >= reworkLimit(state)) {
         state.state = 'NEEDS_HUMAN'
         state.reason = 'rework_limit_reached'
       } else {
@@ -390,7 +427,7 @@ export async function writeDeliveryState(repoRoot, state, { exclusive = false } 
 
 export function deliverySummary(state) {
   const summary = {}
-  for (const key of ['card', 'state', 'branch', 'worktree', 'baseSha', 'currentHead', 'reworkCycles', 'lastAction', 'pr', 'mergeCommit', 'updatedAt', 'evidenceArchive']) {
+  for (const key of ['card', 'state', 'reason', 'branch', 'worktree', 'baseSha', 'currentHead', 'reworkCycles', 'lastAction', 'pr', 'mergeCommit', 'updatedAt', 'evidenceArchive']) {
     if (state[key] !== undefined) summary[key] = state[key]
   }
   const fields = {
@@ -408,11 +445,20 @@ export function deliverySummary(state) {
     commitSha: state.deployment.meta?.githubCommitSha ?? state.deployment.commitSha,
   }
   if (state.pr && typeof state.pr === 'object') summary.pr = { number: state.pr.number, url: state.pr.url }
+  if (state.gateFailures?.length) {
+    const failure = state.gateFailures.at(-1)
+    summary.lastGateFailure = { from: failure.from, reason: failure.reason, authorization: failure.authorization,
+      validation: failure.validation }
+  }
+  if (state.reworkAuthorizations?.length) {
+    summary.reworkLimit = reworkLimit(state)
+    summary.lastReworkAuthorization = state.reworkAuthorizations.at(-1)
+  }
   return summary
 }
 
 export function deliveryCheckpoint(state) {
-  const checkpoint = { version: state.version, ...deliverySummary(state), reviewReceipts: ['REWORKING', 'REVIEWING', 'VALIDATING'].includes(state.state) ? [] : state.reviewReceipts,
+  const checkpoint = { version: state.version, ...deliverySummary(state), reviewReceipts: ['APPROVED', 'SHIPPING', 'DONE'].includes(state.state) ? state.reviewReceipts : [],
     validation: state.validation, focusedValidation: state.focusedValidation, escalationCount: state.escalationCount }
   return '<!-- delivery-checkpoint:v1 -->\n\n```json\n' + JSON.stringify(checkpoint, null, 2) + '\n```\n'
 }
@@ -426,6 +472,72 @@ function checkDeliveryWorktree(state) {
   assert(git(['ls-files', '-v', '-z']).split('\0').filter(Boolean).every((entry) => entry.startsWith('H ')), 'hidden index flags refused')
   git(['merge-base', '--is-ancestor', state.baseSha, state.currentHead])
   return { cwd, git }
+}
+
+function checkGateFindings(state, payload) {
+  assert(state.version === DELIVERY_STATE_VERSION && ['VALIDATING', 'NEEDS_HUMAN'].includes(state.state),
+    'gate_findings requires VALIDATING or a human-authorized validation stop')
+  assert(state.policy.evidenceRequired === true, 'gate_findings requires a recorded raw evidence policy; human reconciliation required')
+  const stopped = state.state === 'NEEDS_HUMAN', terminal = state.history.at(-1)
+  if (stopped) {
+    assert(terminal?.from === 'VALIDATING' && terminal.event === 'needs_human' && terminal.to === 'NEEDS_HUMAN'
+      && typeof state.reason === 'string'
+      && /^(required_gate_failure|workflow_missing_transition_VALIDATING_to_REWORKING_after_required_gate_failure)(?:$|[;:])/.test(state.reason),
+    'not a recoverable validation stop')
+    assert(['reference', 'reason'].every(key => typeof payload.authorization?.[key] === 'string' && payload.authorization[key].trim()),
+      'explicit human authorization reference and reason required')
+  }
+  validateReviewReceipts(state, state.reviewReceipts)
+  assert(state.reviewReceipts.every(receipt => receipt.status === 'approved'), 'prior exact-head approvals required')
+  validateReviewReceipts(state, payload.receipts)
+  for (const receipt of [...state.reviewReceipts, ...payload.receipts]) {
+    assert((receipt.reviewed_base === undefined || receipt.reviewed_base === state.baseSha)
+      && (receipt.card === undefined || receipt.card === state.card), 'gate recovery review pair/card mismatch')
+  }
+  for (const receipt of payload.receipts.filter(receipt => receipt.status === 'approved')) {
+    assert(isDeepStrictEqual(receipt, state.reviewReceipts.find(previous => previous.reviewer_slot === receipt.reviewer_slot)),
+      'unchanged reviewer approvals must preserve their original receipt')
+  }
+  const focused = state.focusedValidation
+  validateFocused(focused, state.currentHead)
+  assert(focused.checks.every(check => typeof check.receiptSha256 === 'string' && check.receiptSha256.trim()),
+    'recorded focused receipt hashes required')
+  checkRecordedEvidence(state, focused, 'focused')
+  const { cwd, git } = checkDeliveryWorktree(state)
+  assert(realpathSync(git(['rev-parse', '--show-toplevel'])) === cwd
+    && git(['symbolic-ref', '--short', 'HEAD']) === state.branch, 'unexpected delivery worktree branch/root')
+  const failed = payload.failedGate
+  assert(typeof failed?.receipt === 'string' && failed.receipt.trim() && typeof failed.receiptSha256 === 'string'
+    && /^[a-f0-9]{64}$/.test(failed.receiptSha256), 'failed gate receipt and SHA-256 required')
+  const receipt = realpathSync(resolve(cwd, failed.receipt)), part = relative(resolve(cwd, '.delivery/evidence', state.card), receipt)
+  assert(part && !part.startsWith('..') && !isAbsolute(part), 'failed gate receipt must belong to delivery evidence')
+  assert(createHash('sha256').update(readFileSync(receipt)).digest('hex') === failed.receiptSha256, 'failed gate receipt changed')
+  const proof = verifyFailedGateEvidence({ receipt, card: state.card, base: state.baseSha, head: state.currentHead, kind: 'gate' })
+  assert(isDeepStrictEqual(proof.snapshot, evidenceSnapshot(cwd)), 'failed gate worktree snapshot changed')
+  const approved = state.history.findLast(entry => entry.event === 'reviews_approved' && entry.to === 'VALIDATING')
+  const start = Date.parse(proof.startedAt), finish = Date.parse(proof.finishedAt)
+  assert(Number.isFinite(start) && Number.isFinite(finish) && start >= Date.parse(approved?.at) && finish >= start
+    && finish <= (stopped ? Date.parse(terminal.at) : Date.now()), 'failed gate must follow reviews and precede validation stop')
+  return { from: state.state, reason: state.reason ?? null, terminal: stopped ? copy(terminal) : null,
+    authorization: stopped ? copy(payload.authorization) : null, reviewReceipts: copy(state.reviewReceipts),
+    snapshot: copy(proof.snapshot),
+    validation: { kind: 'required_gate', result: 'failed', base: state.baseSha, head: state.currentHead,
+      receipt: failed.receipt, receiptSha256: failed.receiptSha256,
+      checks: [{ command: proof.command, exitCode: proof.exitCode, receipt: failed.receipt, receiptSha256: failed.receiptSha256 }] } }
+}
+
+function checkArchivedGateFailures(state, archive) {
+  for (const failure of state.gateFailures ?? []) {
+    const validation = failure.validation
+    const original = resolve(state.worktree, validation.receipt)
+    const receipt = resolve(archive, basename(dirname(original)), 'receipt.json')
+    const proof = verifyFailedGateEvidence({ receipt, card: state.card, base: validation.base, head: validation.head, kind: 'gate' })
+    assert(createHash('sha256').update(readFileSync(receipt)).digest('hex') === validation.receiptSha256,
+      'archived failed gate receipt changed')
+    assert(isDeepStrictEqual(proof.snapshot, failure.snapshot), 'archived failed gate snapshot changed')
+    assert(validation.checks.length === 1 && proof.command === validation.checks[0].command
+      && proof.exitCode === validation.checks[0].exitCode, 'archived failed gate command/result mismatch')
+  }
 }
 
 function checkPreparedWorktree(repoRoot, state) {
@@ -624,6 +736,7 @@ async function main() {
       if (current.validation.profile !== 'reviewed-focused') {
         checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
       }
+      checkArchivedGateFailures(current, payload.evidenceArchive)
     }
     const next = transitionDeliveryState(current, flags.event, payload)
     if (payload.evidenceArchive) next.evidenceArchive = payload.evidenceArchive

@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.1
+
+- Add native, evidence-checked `gate_findings` for confirmed blockers found in
+  VALIDATING, preserving exact-head reviews, failed raw proof and rework limits.
+- Allow explicit human reconciliation only for an evidenced failed-gate
+  NEEDS_HUMAN stop from VALIDATING. Preserve terminal provenance, authorization,
+  history, fingerprints, routes and counters; require fresh rework, reviews and
+  a new full gate before shipping.
+- Expose terminal reasons in checkpoints without presenting old approvals as
+  active. Passing evidence verification never accepts a failed gate.
+
 ## 0.9.0
 
 - Start an executable Linear card directly with `/start-card`. Explicit
