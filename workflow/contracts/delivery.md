@@ -327,6 +327,31 @@ branch/snapshot, receipt hash and raw file hashes, even after worktree removal.
 
 ### Rework
 
+At the recorded limit, an explicit human decision may authorize one additional
+correction and its independent review round within the same accepted scope.
+Supply `reworkAuthorization` in the existing `review_findings` (REVIEWING) or
+`gate_findings` (VALIDATING) payload, alongside every exact-head reviewer slot,
+complete confirmed blockers and, for a gate failure, the verified failed bundle:
+
+```json
+{"reworkAuthorization":{"reference":"<human-decision-reference>","reason":"<authorized-bounded-correction>","additionalCycles":1}}
+```
+
+Both strings must be non-empty. The engine records the decision; it never infers
+human permission from a blocker, standing policy or retry request. The orchestrator
+must verify that the cited human instruction authorizes this correction. This
+field is rejected before the effective limit, after it, or in a terminal state;
+it adds no terminal recovery path. Without it, the existing limit stops at
+NEEDS_HUMAN. The automatic `policy.maxReworkCycles` and all consumed counters,
+escalations, fingerprints, prior evidence and history remain intact.
+Local `reworkAuthorizations` retain each decision's reference, reason, event,
+timestamp, exact base/head, current counter and old/new effective limits. Each
+decision increases that limit by exactly one. The summary/checkpoint exposes the
+latest decision and effective limit. Never edit state JSON or reset counters.
+After the new commit, successful focused proof, every fresh independent review
+slot, a newly executed full gate and the existing evidence archive are mandatory;
+focused reuse and reduced gates cannot replace that full gate.
+
 Input: card ID, worktree, current reviewed head, cycle, exact route, and confirmed
 structured findings only. Output the new commit, findings addressed, focused
 validation, and unresolved blockers. Rework never runs the next review; the

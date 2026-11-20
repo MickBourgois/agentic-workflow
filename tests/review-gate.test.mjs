@@ -127,6 +127,90 @@ test('new delivery budget caps older config values and keeps historical limits o
   assert.equal(transitionDeliveryState(secondRound, 'review_findings', payload).state, 'REWORKING')
 })
 
+const reworkAuthorization = { reference: 'human-decision-701', reason: 'Authorize one more confirmed correction', additionalCycles: 1 }
+const reviewFindings = () => ({ receipts: [receipt('head', 'A'),
+  { ...receipt('head', 'B', 'findings'), findings: [finding()] }], findings: [finding()] })
+
+test('explicit human authorization adds exactly one cycle, preserving the automatic limit and durable state', () => {
+  const state = { ...reviewing('critical'), reworkCycles: 1, escalationCount: 1,
+    failureFingerprints: { prior_failure: 2 }, previousReview: { head: 'prior', receipts: [] } }
+  const original = structuredClone(state), payload = { ...reviewFindings(), reworkAuthorization }
+  const next = transitionDeliveryState(state, 'review_findings', payload)
+  assert.equal(next.state, 'REWORKING')
+  for (const field of ['policy', 'route', 'reworkCycles', 'escalationCount', 'failureFingerprints', 'previousReview', 'baseSha', 'currentHead']) {
+    assert.deepEqual(next[field], original[field], field)
+  }
+  assert.deepEqual(state, original, 'transition does not mutate the input')
+  assert.deepEqual(next.reviewReceipts, payload.receipts)
+  assert.deepEqual(next.findings, payload.findings)
+  assert.deepEqual(next.history.slice(0, -1), state.history)
+  const authorization = next.reworkAuthorizations[0]
+  assert.deepEqual(authorization, { ...reworkAuthorization, previousLimit: 1, newLimit: 2,
+    reworkCycles: 1, base: 'base', head: 'head', event: 'review_findings', at: authorization.at })
+  assert.ok(Number.isFinite(Date.parse(authorization.at)))
+  assert.match(deliveryCheckpoint(next), /lastReworkAuthorization/)
+  assert.doesNotMatch(deliveryCheckpoint(next), /code_and_focused_checks/)
+
+  const corrected = transitionDeliveryState(next, 'rework_complete', { commit: 'corrected', validation: focused('corrected') })
+  assert.equal(corrected.reworkCycles, 2)
+  assert.deepEqual(corrected.reworkAuthorizations, next.reworkAuthorizations)
+  assert.deepEqual(corrected.previousReview.receipts, payload.receipts)
+  assert.throws(() => transitionDeliveryState(corrected, 'reviews_approved', { receipts: [receipt('corrected', 'A')] }))
+  const pending = transitionDeliveryState(corrected, 'reviews_approved', {
+    receipts: [receipt('corrected', 'A'), receipt('corrected', 'B')],
+  })
+  assert.throws(() => transitionDeliveryState(pending, 'start_shipping'))
+  pending.policy.validationMode = 'project'
+  assert.throws(() => transitionDeliveryState(pending, 'review_approved', {
+    validation: { ...gate('corrected'), profile: 'affected' },
+  }), /new full gate/)
+  assert.equal(transitionDeliveryState(pending, 'review_approved', { validation: gate('corrected') }).state, 'APPROVED')
+  const remaining = { receipts: reviewFindings().receipts.map(value => ({ ...value, reviewed_head: 'corrected' })), findings: [finding()] }
+  assert.equal(transitionDeliveryState(corrected, 'review_findings', remaining).state, 'NEEDS_HUMAN')
+  const extended = transitionDeliveryState(corrected, 'review_findings', { ...remaining, reworkAuthorization })
+  assert.equal(extended.reworkCycles, 2)
+  assert.equal(extended.policy.maxReworkCycles, 1)
+  assert.deepEqual(extended.reworkAuthorizations[0], next.reworkAuthorizations[0])
+  assert.equal(extended.reworkAuthorizations[1].previousLimit, 2)
+  assert.equal(extended.reworkAuthorizations[1].newLimit, 3)
+})
+
+test('additional cycle authorization rejects early, exceeded, malformed and invalid exact-pair findings', () => {
+  const state = { ...reviewing('critical'), reworkCycles: 1 }, payload = { ...reviewFindings(), reworkAuthorization }
+  for (const authorization of [null, [], {}, { ...reworkAuthorization, reference: '' },
+    { ...reworkAuthorization, reason: ' ' }, { ...reworkAuthorization, additionalCycles: 2 },
+    { ...reworkAuthorization, additionalCycles: '1' }, { ...reworkAuthorization, additionalCycles: 0 }]) {
+    assert.throws(() => transitionDeliveryState(state, 'review_findings', { ...payload, reworkAuthorization: authorization }), /reworkAuthorization/)
+  }
+  for (const reworkCycles of [0, 2]) {
+    assert.throws(() => transitionDeliveryState({ ...state, reworkCycles }, 'review_findings', payload), /current rework limit/)
+  }
+  for (const changes of [{ receipts: [payload.receipts[0]] },
+    { receipts: [payload.receipts[0], { ...payload.receipts[1], reviewer_slot: 'A' }] },
+    { receipts: [payload.receipts[0], { ...payload.receipts[1], reviewed_head: 'old' }] },
+    { receipts: [payload.receipts[0], { ...payload.receipts[1], reviewed_base: 'old' }] },
+    { receipts: [payload.receipts[0], { ...payload.receipts[1], card: 'PROJ-999' }] },
+    { receipts: [payload.receipts[0], { ...payload.receipts[1], findings: [] }] },
+    { findings: [] }, { findings: [{ ...finding(), file: 'unreviewed.mjs' }] }]) {
+    assert.throws(() => transitionDeliveryState(state, 'review_findings', { ...payload, ...changes }))
+    assert.equal(state.reworkAuthorizations, undefined)
+  }
+  const stopped = transitionDeliveryState(state, 'review_findings', reviewFindings())
+  assert.equal(stopped.state, 'NEEDS_HUMAN')
+  assert.throws(() => transitionDeliveryState(stopped, 'review_findings', payload), /terminal state/)
+})
+
+test('human-authorized rework also prevents reviewed-focused gate reuse on standard deliveries', () => {
+  const state = { ...reviewing(), reworkCycles: 1 }
+  state.policy.evidenceRequired = true
+  state.policy.reuseFocusedChecks = true
+  const receipts = [{ ...receipt('head', 'single', 'findings'), findings: [finding()] }]
+  const rework = transitionDeliveryState(state, 'review_findings', { receipts, findings: [finding()], reworkAuthorization })
+  const corrected = transitionDeliveryState(rework, 'rework_complete', { commit: 'corrected', validation: focused('corrected') })
+  const pending = transitionDeliveryState(corrected, 'reviews_approved', { receipts: [receipt('corrected')] })
+  assert.throws(() => transitionDeliveryState(pending, 'review_approved', { useReviewedFocused: true }), /new full gate/)
+})
+
 test('focused gate reuse rejects historical, complex and critical deliveries', () => {
   for (const complexity of ['simple', 'complex', 'critical']) {
     const state = reviewing(complexity)

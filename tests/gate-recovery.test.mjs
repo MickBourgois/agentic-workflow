@@ -215,6 +215,37 @@ test('rework limits cannot be reset by human authorization or payload counters',
     'gate_findings', f.payload).state, 'REWORKING', 'historical budget is preserved')
 })
 
+test('gate findings accept one explicit additional cycle only after all failed-gate and review proof validates', async () => {
+  const f = await fixture(), reworkAuthorization = { ...f.authorization, additionalCycles: 1 }
+  const current = { ...f.state, reworkCycles: 1, escalationCount: 1, failureFingerprints: { prior_failure: 2 } }
+  const payload = { ...f.payload, reworkAuthorization }
+  await writeDeliveryState(f.root, current)
+  for (const changes of [{ reworkAuthorization: null }, { reworkAuthorization: { ...reworkAuthorization, additionalCycles: 2 } },
+    { reworkAuthorization: { ...reworkAuthorization, reference: '' } }, { failedGate: undefined },
+    { failedGate: { ...f.payload.failedGate, receiptSha256: '0'.repeat(64) } },
+    { receipts: [f.payload.receipts[0]] }, { receipts: [{ ...f.payload.receipts[0], reviewed_head: f.base }, f.payload.receipts[1]] },
+    { receipts: [{ ...f.payload.receipts[0], reviewed_base: f.head }, f.payload.receipts[1]] }, { findings: [] },
+    { findings: [{ ...defect, file: 'other.mjs' }] }]) {
+    await f.event('gate_findings', { ...payload, ...changes }, false)
+  }
+  assert.throws(() => transitionDeliveryState(f.state, 'gate_findings', payload), /current rework limit/)
+  assert.throws(() => transitionDeliveryState(f.stop(current), 'gate_findings', {
+    ...payload, authorization: f.authorization,
+  }), /rework limit/)
+  const next = await f.event('gate_findings', payload)
+  assert.equal(next.state, 'REWORKING')
+  for (const field of ['policy', 'route', 'reworkCycles', 'escalationCount', 'failureFingerprints', 'baseSha', 'currentHead']) {
+    assert.deepEqual(next[field], current[field], field)
+  }
+  assert.deepEqual(next.history.slice(0, -1), current.history)
+  assert.deepEqual(next.gateFailures[0].reviewReceipts, current.reviewReceipts)
+  assert.equal(next.gateFailures[0].validation.result, 'failed')
+  const trace = next.reworkAuthorizations[0]
+  assert.deepEqual(trace, { ...reworkAuthorization, previousLimit: 1, newLimit: 2, reworkCycles: 1,
+    base: f.base, head: f.head, event: 'gate_findings', at: trace.at })
+  assert.ok(Number.isFinite(Date.parse(trace.at)))
+})
+
 test('dirty sources, hidden index flags, changed branch/head and changed focused proof refuse recovery', async () => {
   const f = await fixture()
   await writeFile(join(f.root, 'app.mjs'), 'changed\n')
@@ -239,7 +270,6 @@ test('dirty sources, hidden index flags, changed branch/head and changed focused
 
 test('recovery requires new proof and archives every failed bundle before DONE, including after worktree removal', async () => {
   const f = await fixture('standard', true)
-  f.state.policy.maxReworkCycles = 2
   await writeDeliveryState(f.root, f.stop())
   await f.event('gate_findings', { ...f.payload, authorization: f.authorization })
   await f.event('rework_complete', { commit: f.head, validation: f.state.focusedValidation }, false)
@@ -264,7 +294,8 @@ test('recovery requires new proof and archives every failed bundle before DONE, 
   await f.event('review_approved', { validation: reviewing.gateFailures[0].validation }, false)
   const secondRed = f.capture('gate', true, head)
   await f.event('gate_findings', { failedGate: { receipt: secondRed.receipt, receiptSha256: sha(await readFile(secondRed.receipt)) },
-    receipts: [{ ...approval(head, 'single'), status: 'findings', findings: [defect] }], findings: [defect] })
+    receipts: [{ ...approval(head, 'single'), status: 'findings', findings: [defect] }], findings: [defect],
+    reworkAuthorization: { ...f.authorization, additionalCycles: 1 } })
   await writeFile(join(f.root, 'app.mjs'), 'export const accepts = value => typeof value === "string" && value !== ""\n')
   f.git('add', 'app.mjs'); f.git('commit', '-m', 'second bounded correction')
   head = f.git('rev-parse', 'HEAD')
@@ -281,6 +312,9 @@ test('recovery requires new proof and archives every failed bundle before DONE, 
   assert.equal((await f.event('review_approved', { validation })).state, 'APPROVED')
   const shipping = await f.event('start_shipping', {})
   assert.equal(shipping.state, 'SHIPPING')
+  assert.equal(shipping.reworkCycles, 2)
+  assert.equal(shipping.policy.maxReworkCycles, 1)
+  assert.equal(shipping.reworkAuthorizations[0].head, reviewing.currentHead)
   assert.equal(shipping.gateFailures.length, 2)
   assert.equal(JSON.parse(await readFile(f.red.receipt, 'utf8')).result, 'failed')
 

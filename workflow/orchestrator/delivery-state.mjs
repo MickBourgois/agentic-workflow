@@ -157,6 +157,7 @@ function validateChecks(checks) {
 
 function reviewedFocusedGate(state) {
   assert(!state.gateFailures?.length, 'failed gate recovery requires a new full gate')
+  assert(!state.reworkAuthorizations?.length, 'human-authorized rework requires a new full gate')
   assert(state.policy?.reuseFocusedChecks === true && state.policy.evidenceRequired === true
     && ['simple', 'standard'].includes(state.complexity), 'reviewed focused gate not permitted for this delivery')
   const focused = state.focusedValidation
@@ -176,6 +177,7 @@ function validateGate(state, validation) {
   assert(typeof validation.profile === 'string' && validation.profile.trim()
     && typeof validation.reason === 'string' && validation.reason.trim(), 'gate profile and reason required')
   assert(!state.gateFailures?.length || validation.profile === 'full', 'failed gate recovery requires a new full gate')
+  assert(!state.reworkAuthorizations?.length || validation.profile === 'full', 'human-authorized rework requires a new full gate')
   if (validation.profile === 'reviewed-focused') {
     assert(isDeepStrictEqual(validation, reviewedFocusedGate(state)), 'gate must match the reviewed focused evidence')
   } else {
@@ -199,14 +201,34 @@ function nextActionForState(state) {
   }[state] ?? 'stop'
 }
 
+function reworkLimit(state) {
+  // Historical states without a recorded limit used two reworks.
+  return (state.policy?.maxReworkCycles ?? 2) + (state.reworkAuthorizations?.length ?? 0)
+}
+
+function authorizeAdditionalRework(state, authorization, event) {
+  if (authorization === undefined) return
+  assert(authorization && typeof authorization === 'object' && !Array.isArray(authorization)
+    && authorization.additionalCycles === 1
+    && ['reference', 'reason'].every(key => typeof authorization[key] === 'string' && authorization[key].trim()),
+  'reworkAuthorization requires explicit human reference, reason and additionalCycles: 1')
+  const previousLimit = reworkLimit(state)
+  assert(['REVIEWING', 'VALIDATING'].includes(state.state) && state.reworkCycles === previousLimit,
+    'additional rework authorization requires the current rework limit to be reached in REVIEWING or VALIDATING')
+  state.reworkAuthorizations = [...(state.reworkAuthorizations ?? []), {
+    reference: authorization.reference, reason: authorization.reason, additionalCycles: 1,
+    previousLimit, newLimit: previousLimit + 1, reworkCycles: state.reworkCycles,
+    base: state.baseSha, head: state.currentHead, event, at: new Date().toISOString(),
+  }]
+}
+
 export function transitionDeliveryState(current, event, payload = {}) {
   assert([1, DELIVERY_STATE_VERSION].includes(current.version), 'unsupported delivery state version; needs human reconciliation')
   assert(!TERMINAL_STATES.has(current.state) || (current.state === 'NEEDS_HUMAN' && event === 'gate_findings'),
     `terminal state ${current.state} cannot transition`)
   const state = copy(current)
   const from = state.state
-  // Historical states without a recorded limit used two reworks.
-  const maxReworkCycles = state.policy?.maxReworkCycles ?? 2
+  const maxReworkCycles = reworkLimit(state)
   const maxEscalations = state.policy?.maxEscalations ?? WORKFLOW_DEFAULTS.delivery.maxEscalations
 
   switch (event) {
@@ -257,6 +279,8 @@ export function transitionDeliveryState(current, event, payload = {}) {
         delete state.reason
       } else requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
+      assert(payload.receipts.every(receipt => (receipt.reviewed_base === undefined || receipt.reviewed_base === state.baseSha)
+        && (receipt.card === undefined || receipt.card === state.card)), 'review findings pair/card mismatch')
       validateFocused(event === 'gate_findings' ? state.focusedValidation : state.validation, state.currentHead)
       assert(payload.receipts.some((receipt) => receipt.status === 'findings'), 'findings receipt required')
       validateBlockingFindings(payload.findings)
@@ -265,9 +289,10 @@ export function transitionDeliveryState(current, event, payload = {}) {
       const actualFindings = new Set(payload.findings.map(findingKey))
       assert(actualFindings.size === payload.findings.length && actualFindings.size === expectedFindings.size
         && [...actualFindings].every((key) => expectedFindings.has(key)), 'confirmed findings must cover all reviewed blockers exactly once')
+      authorizeAdditionalRework(state, payload.reworkAuthorization, event)
       state.reviewReceipts = payload.receipts
       state.findings = payload.findings
-      if (state.reworkCycles >= maxReworkCycles) {
+      if (state.reworkCycles >= reworkLimit(state)) {
         state.state = 'NEEDS_HUMAN'
         state.reason = 'rework_limit_reached'
       } else {
@@ -422,6 +447,10 @@ export function deliverySummary(state) {
     const failure = state.gateFailures.at(-1)
     summary.lastGateFailure = { from: failure.from, reason: failure.reason, authorization: failure.authorization,
       validation: failure.validation }
+  }
+  if (state.reworkAuthorizations?.length) {
+    summary.reworkLimit = reworkLimit(state)
+    summary.lastReworkAuthorization = state.reworkAuthorizations.at(-1)
   }
   return summary
 }

@@ -172,7 +172,13 @@ Keep settled scope/design decisions on re-review. New blockers require a concret
 defect under the same policy. Batch confirmed defects into the one allowed
 correction. Preserve the rework counter on resume. At the limit, present the
 remaining blockers and proposed decision to the user. Any additional review
-or rework requires explicit human approval.
+or rework requires explicit human approval. When the existing human instruction
+expressly authorizes that bounded correction in the accepted scope, record it
+through `reworkAuthorization: {reference, reason, additionalCycles: 1}` in the
+current `review_findings` or `gate_findings` event before a terminal stop. Follow
+the delivery contract's exact-limit and proof requirements; never infer approval
+or reset counters. This adds one cycle with a durable decision trace, then
+requires fresh focused proof, all review slots and a newly executed full gate.
 
 ## 5. Dispatch shipping
 
