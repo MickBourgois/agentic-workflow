@@ -289,8 +289,10 @@ requires the frozen card/base/head, matching live clean branch/worktree snapshot
 unchanged sources, hashed stdout/stderr/process logs, and an actual completed
 nonzero command exit. Cancelled or timed-out commands are not defect evidence.
 The gate must have run after the saved exact-head approvals. Stored successful
-focused checks and their previously recorded hashes are reverified, even for
-older state policies. Default passing-evidence verification remains strict.
+focused checks and their previously recorded hashes are reverified. Recovery
+requires the recorded `policy.evidenceRequired: true`; older policies require
+human reconciliation without silently changing their policy. Default
+passing-evidence verification remains strict.
 
 An existing NEEDS_HUMAN stop can use this same event only with explicit human
 authorization, supplied as `authorization: {reference: <decision-reference>,
@@ -319,7 +321,9 @@ it enters REWORKING; a VALIDATING delivery at its limit stops NEEDS_HUMAN.
 Rework must produce a new head with passing focused proof, all fresh independent
 review slots and a newly executed full gate before delivery approval and shipping.
 Reviewed-focused reuse cannot replace that gate. Historical failed receipts stay
-failed and must be retained with the delivery's evidence archive.
+failed and must be retained with the delivery's evidence archive. Before DONE,
+the CLI verifies every recorded failed bundle against its historical base/head,
+branch/snapshot, receipt hash and raw file hashes, even after worktree removal.
 
 ### Rework
 

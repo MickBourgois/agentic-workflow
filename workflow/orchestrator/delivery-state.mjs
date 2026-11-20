@@ -446,6 +446,7 @@ function checkDeliveryWorktree(state) {
 function checkGateFindings(state, payload) {
   assert(state.version === DELIVERY_STATE_VERSION && ['VALIDATING', 'NEEDS_HUMAN'].includes(state.state),
     'gate_findings requires VALIDATING or a human-authorized validation stop')
+  assert(state.policy.evidenceRequired === true, 'gate_findings requires a recorded raw evidence policy; human reconciliation required')
   const stopped = state.state === 'NEEDS_HUMAN', terminal = state.history.at(-1)
   if (stopped) {
     assert(terminal?.from === 'VALIDATING' && terminal.event === 'needs_human' && terminal.to === 'NEEDS_HUMAN'
@@ -470,7 +471,7 @@ function checkGateFindings(state, payload) {
   validateFocused(focused, state.currentHead)
   assert(focused.checks.every(check => typeof check.receiptSha256 === 'string' && check.receiptSha256.trim()),
     'recorded focused receipt hashes required')
-  checkRecordedEvidence({ ...state, policy: { ...state.policy, evidenceRequired: true } }, focused, 'focused')
+  checkRecordedEvidence(state, focused, 'focused')
   const { cwd, git } = checkDeliveryWorktree(state)
   assert(realpathSync(git(['rev-parse', '--show-toplevel'])) === cwd
     && git(['symbolic-ref', '--short', 'HEAD']) === state.branch, 'unexpected delivery worktree branch/root')
@@ -488,9 +489,24 @@ function checkGateFindings(state, payload) {
     && finish <= (stopped ? Date.parse(terminal.at) : Date.now()), 'failed gate must follow reviews and precede validation stop')
   return { from: state.state, reason: state.reason ?? null, terminal: stopped ? copy(terminal) : null,
     authorization: stopped ? copy(payload.authorization) : null, reviewReceipts: copy(state.reviewReceipts),
+    snapshot: copy(proof.snapshot),
     validation: { kind: 'required_gate', result: 'failed', base: state.baseSha, head: state.currentHead,
       receipt: failed.receipt, receiptSha256: failed.receiptSha256,
       checks: [{ command: proof.command, exitCode: proof.exitCode, receipt: failed.receipt, receiptSha256: failed.receiptSha256 }] } }
+}
+
+function checkArchivedGateFailures(state, archive) {
+  for (const failure of state.gateFailures ?? []) {
+    const validation = failure.validation
+    const original = resolve(state.worktree, validation.receipt)
+    const receipt = resolve(archive, basename(dirname(original)), 'receipt.json')
+    const proof = verifyFailedGateEvidence({ receipt, card: state.card, base: validation.base, head: validation.head, kind: 'gate' })
+    assert(createHash('sha256').update(readFileSync(receipt)).digest('hex') === validation.receiptSha256,
+      'archived failed gate receipt changed')
+    assert(isDeepStrictEqual(proof.snapshot, failure.snapshot), 'archived failed gate snapshot changed')
+    assert(validation.checks.length === 1 && proof.command === validation.checks[0].command
+      && proof.exitCode === validation.checks[0].exitCode, 'archived failed gate command/result mismatch')
+  }
 }
 
 function checkPreparedWorktree(repoRoot, state) {
@@ -689,6 +705,7 @@ async function main() {
       if (current.validation.profile !== 'reviewed-focused') {
         checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
       }
+      checkArchivedGateFailures(current, payload.evidenceArchive)
     }
     const next = transitionDeliveryState(current, flags.event, payload)
     if (payload.evidenceArchive) next.evidenceArchive = payload.evidenceArchive

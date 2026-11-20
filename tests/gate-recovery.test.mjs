@@ -1,7 +1,7 @@
 import test from 'node:test'
 import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
-import { mkdtemp, readFile, writeFile } from 'node:fs/promises'
+import { access, cp, mkdtemp, readFile, writeFile } from 'node:fs/promises'
 import { execFileSync, spawnSync } from 'node:child_process'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
@@ -16,13 +16,20 @@ const defect = { id: 'FIX-1', priority: 'P1', file: 'app.mjs', line: 1,
   required_change: 'Reject empty input and retain a regression test' }
 const approval = (head, slot) => ({ reviewed_head: head, reviewer_slot: slot, status: 'approved', scope: 'code_and_focused_checks' })
 
-async function fixture(complexity = 'critical') {
-  const root = await mkdtemp(join(tmpdir(), 'workflow-gate-recovery-'))
+async function fixture(complexity = 'critical', linked = false) {
+  let root = await mkdtemp(join(tmpdir(), 'workflow-gate-recovery-'))
+  const owner = root
+  const branch = linked ? 'codex/delivery' : 'codex/fixture'
   const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
   git('init', '-b', 'codex/fixture'); git('config', 'user.email', 'fixture@example.test'); git('config', 'user.name', 'Fixture')
   await writeFile(join(root, '.gitignore'), '.delivery/\n')
   git('add', '.gitignore'); git('commit', '-m', 'base')
   const base = git('rev-parse', 'HEAD')
+  if (linked) {
+    const delivery = await mkdtemp(join(tmpdir(), 'workflow-gate-worktree-'))
+    git('worktree', 'add', '-b', branch, delivery)
+    root = delivery
+  }
   await writeFile(join(root, 'app.mjs'), 'export const accepts = value => true\n')
   git('add', 'app.mjs'); git('commit', '-m', 'implementation')
   const head = git('rev-parse', 'HEAD'), card = 'PROJ-901'
@@ -36,7 +43,7 @@ async function fixture(complexity = 'critical') {
   const green = capture('focused')
   const focused = { head, focused: 'passed', checks: [{ command: green.command, exitCode: 0,
     receipt: green.receipt, receiptSha256: sha(await readFile(green.receipt)) }] }
-  let state = createDeliveryState({ card, complexity, baseSha: base, worktree: root, branch: 'codex/fixture' })
+  let state = createDeliveryState({ card, complexity, baseSha: base, worktree: root, branch })
   state.policy.evidenceRequired = true
   state.policy.reuseFocusedChecks = true
   state = transitionDeliveryState(state, 'start_implementation')
@@ -50,18 +57,33 @@ async function fixture(complexity = 'critical') {
   const stop = (current = state) => transitionDeliveryState(current, 'needs_human', { reason: 'required_gate_failure; human reconciliation required' })
   const authorization = { reference: 'human-decision-901', reason: 'Resume the confirmed bounded correction' }
   const path = join(root, '.delivery/state', `${card}.json`)
-  const event = async (name, data, ok = true) => {
-    const before = await readFile(path, 'utf8')
-    await writeFile(join(root, '.delivery/payload.json'), JSON.stringify(data))
-    const result = spawnSync(process.execPath, [stateCli, 'event', '--repo', root, '--card', card,
+  const event = async (name, data, ok = true, repo = root) => {
+    const stateFile = join(repo, '.delivery/state', `${card}.json`)
+    const before = await readFile(stateFile, 'utf8')
+    await writeFile(join(repo, '.delivery/payload.json'), JSON.stringify(data))
+    const result = spawnSync(process.execPath, [stateCli, 'event', '--repo', repo, '--card', card,
       '--event', name, '--payload-file', '.delivery/payload.json'], { encoding: 'utf8' })
     assert.equal(result.status === 0, ok, result.stderr)
-    if (!ok) assert.equal(await readFile(path, 'utf8'), before, 'rejected events must not rewrite state')
+    if (!ok) assert.equal(await readFile(stateFile, 'utf8'), before, 'rejected events must not rewrite state')
     return ok ? JSON.parse(result.stdout) : result.stderr
   }
   await writeDeliveryState(root, state)
-  return { root, card, base, head, git, state, green, red, payload, stop, authorization, path, event, capture }
+  return { root, owner, card, base, head, git, state, green, red, payload, stop, authorization, path, event, capture }
 }
+
+test('recovery refuses legacy evidence policies without rewriting historical state', async () => {
+  const f = await fixture('standard')
+  for (const evidenceRequired of [false, undefined]) {
+    for (const stopped of [false, true]) {
+      const state = structuredClone(f.state)
+      if (evidenceRequired === undefined) delete state.policy.evidenceRequired
+      else state.policy.evidenceRequired = evidenceRequired
+      await writeDeliveryState(f.root, stopped ? f.stop(state) : state)
+      assert.match(await f.event('gate_findings', { ...f.payload, authorization: f.authorization }, false),
+        /recorded raw evidence policy/)
+    }
+  }
+})
 
 test('native CLI records gate findings in VALIDATING without converting failure to approval', async () => {
   const f = await fixture()
@@ -215,16 +237,19 @@ test('dirty sources, hidden index flags, changed branch/head and changed focused
   await f.event('gate_findings', f.payload, false)
 })
 
-test('recovery requires new head, focused proof, all review slots and a new full gate before shipping', async () => {
-  const f = await fixture('standard')
+test('recovery requires new proof and archives every failed bundle before DONE, including after worktree removal', async () => {
+  const f = await fixture('standard', true)
+  f.state.policy.maxReworkCycles = 2
   await writeDeliveryState(f.root, f.stop())
   await f.event('gate_findings', { ...f.payload, authorization: f.authorization })
   await f.event('rework_complete', { commit: f.head, validation: f.state.focusedValidation }, false)
   await writeFile(join(f.root, 'app.mjs'), 'export const accepts = value => value !== ""\n')
   f.git('add', 'app.mjs'); f.git('commit', '-m', 'bounded correction')
-  const head = f.git('rev-parse', 'HEAD')
+  let head = f.git('rev-parse', 'HEAD')
   await f.event('rework_complete', { commit: head, validation: { head, focused: 'passed', checks: [] } }, false)
-  const green = f.capture('focused', false, head)
+  await f.event('rework_complete', { commit: head, validation: { head, focused: 'passed',
+    checks: [{ command: 'unexecuted focused check', exitCode: 0 }] } }, false)
+  let green = f.capture('focused', false, head)
   const focused = { head, focused: 'passed', checks: [{ command: green.command, exitCode: 0, receipt: green.receipt }] }
   const reviewing = await f.event('rework_complete', { commit: head, validation: focused })
   assert.equal(reviewing.reworkCycles, 1)
@@ -237,11 +262,61 @@ test('recovery requires new head, focused proof, all review slots and a new full
   await f.event('start_shipping', {}, false)
   await f.event('review_approved', { useReviewedFocused: true }, false)
   await f.event('review_approved', { validation: reviewing.gateFailures[0].validation }, false)
+  const secondRed = f.capture('gate', true, head)
+  await f.event('gate_findings', { failedGate: { receipt: secondRed.receipt, receiptSha256: sha(await readFile(secondRed.receipt)) },
+    receipts: [{ ...approval(head, 'single'), status: 'findings', findings: [defect] }], findings: [defect] })
+  await writeFile(join(f.root, 'app.mjs'), 'export const accepts = value => typeof value === "string" && value !== ""\n')
+  f.git('add', 'app.mjs'); f.git('commit', '-m', 'second bounded correction')
+  head = f.git('rev-parse', 'HEAD')
+  green = f.capture('focused', false, head)
+  await f.event('rework_complete', { commit: head, validation: { head, focused: 'passed',
+    checks: [{ command: green.command, exitCode: 0, receipt: green.receipt }] } })
+  await f.event('reviews_approved', { receipts: [approval(head, 'single')] })
   const gate = f.capture('gate', false, head)
   const validation = { kind: 'required_gate', result: 'passed', base: f.base, head, profile: 'full',
     reason: 'Full gate after confirmed correction', receipt: gate.receipt,
     checks: [{ command: gate.command, exitCode: 0, receipt: gate.receipt }] }
+  await f.event('review_approved', { validation: { ...validation, receipt: 'nonexistent-receipt',
+    checks: [{ command: 'unexecuted gate', exitCode: 0, receipt: 'nonexistent-receipt' }] } }, false)
   assert.equal((await f.event('review_approved', { validation })).state, 'APPROVED')
-  assert.equal((await f.event('start_shipping', {})).state, 'SHIPPING')
+  const shipping = await f.event('start_shipping', {})
+  assert.equal(shipping.state, 'SHIPPING')
+  assert.equal(shipping.gateFailures.length, 2)
   assert.equal(JSON.parse(await readFile(f.red.receipt, 'utf8')).result, 'failed')
+
+  const archive = await mkdtemp(join(tmpdir(), 'workflow-gate-archive-'))
+  const done = { mergeCommit: head, pr: 'https://example.test/pr/1', evidenceArchive: archive }
+  for (const capture of [green, gate]) await cp(capture.directory, join(archive, capture.directory.split('/').at(-1)), { recursive: true })
+  await f.event('shipped', done, false)
+  const bundle = join(archive, f.red.directory.split('/').at(-1))
+  await cp(f.red.directory, bundle, { recursive: true })
+  await f.event('shipped', done, false)
+  await cp(secondRed.directory, join(archive, secondRed.directory.split('/').at(-1)), { recursive: true })
+
+  for (const filename of ['receipt.json', 'stdout.log', 'stderr.log', 'process.json']) {
+    const file = join(bundle, filename), original = await readFile(file)
+    await writeFile(file, filename === 'receipt.json' ? Buffer.concat([original, Buffer.from('\n')]) : 'altered')
+    await f.event('shipped', done, false)
+    await writeFile(file, original)
+  }
+  for (const changes of [{ base: head }, { head: f.base },
+    { snapshot: { ...shipping.gateFailures[0].snapshot, branch: 'codex/other' } },
+    { snapshot: { ...shipping.gateFailures[0].snapshot, fingerprint: 'changed' } }]) {
+    const changed = structuredClone(shipping)
+    if (changes.snapshot) changed.gateFailures[0].snapshot = changes.snapshot
+    else Object.assign(changed.gateFailures[0].validation, changes)
+    await writeDeliveryState(f.root, changed)
+    await f.event('shipped', done, false)
+  }
+  await writeDeliveryState(f.root, shipping)
+  assert.equal((await f.event('shipped', done)).state, 'DONE')
+
+  await writeDeliveryState(f.owner, shipping)
+  f.git('-C', f.owner, 'worktree', 'remove', f.root)
+  await assert.rejects(access(f.root), { code: 'ENOENT' })
+  const rawFile = join(bundle, 'stderr.log'), original = await readFile(rawFile)
+  await writeFile(rawFile, 'altered after cleanup')
+  await f.event('shipped', done, false, f.owner)
+  await writeFile(rawFile, original)
+  assert.equal((await f.event('shipped', done, true, f.owner)).state, 'DONE')
 })
