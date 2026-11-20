@@ -26,13 +26,15 @@ async function fixture() {
 
 test('execution preserves successful and red raw output with actual Git identity', async () => {
   const f = await fixture()
-  const green = f.run('run', ['--kind', 'focused', '--', process.execPath, '-e', 'console.log("green");console.error("diagnostic")'])
+  const green = f.run('run', ['--kind', 'focused', '--', process.execPath, '-e', 'require("node:fs").appendFileSync(".delivery/executions","focused\\n");console.log("green");console.error("diagnostic")'])
   const raw = JSON.parse(await readFile(green.receipt, 'utf8'))
   assert.equal(raw.head, f.head)
   assert.equal(raw.snapshot.dirty, false)
   assert.equal(await readFile(join(green.directory, 'stdout.log'), 'utf8'), 'green\n')
   assert.equal(await readFile(join(green.directory, 'stderr.log'), 'utf8'), 'diagnostic\n')
   f.run('verify', ['--receipt', green.receipt, '--kind', 'focused'])
+  f.run('verify', ['--receipt', green.receipt, '--kind', 'focused'])
+  assert.equal(await readFile(join(f.root, '.delivery/executions'), 'utf8'), 'focused\n')
   const red = f.run('run', ['--kind', 'regression', '--', process.execPath, '-e', 'console.error("expected failure");process.exit(1)'], 1)
   assert.equal(JSON.parse(await readFile(red.receipt, 'utf8')).exitCode, 1)
   assert.equal(await readFile(join(red.directory, 'stderr.log'), 'utf8'), 'expected failure\n')
@@ -88,7 +90,7 @@ for (const reuse of [false, true]) test(`exact-head evidence survives review, sh
   }
   const focused = { head: f.head, focused: 'passed', checks: [{ command: 'tests passed in prose', exitCode: 0 }] }
   await event('implementation_complete', { commit: f.head, validation: focused }, 1)
-  const capture = f.run('run', ['--kind', 'focused', '--', process.execPath, '-e', 'console.log("focused")'])
+  const capture = f.run('run', ['--kind', 'focused', '--', process.execPath, '-e', 'require("node:fs").appendFileSync(".delivery/executions","focused\\n");console.log("focused")'])
   const screenshot = join(f.root, '.delivery/screenshot.html')
   await writeFile(screenshot, '<main>browser fixture</main>')
   const browser = f.run('collect', ['--kind', 'browser', '--', screenshot])
@@ -103,20 +105,28 @@ for (const reuse of [false, true]) test(`exact-head evidence survives review, sh
     await writeFile(join(capture.directory, 'stdout.log'), 'tampered')
     await event('review_approved', { useReviewedFocused: true }, 1)
     await writeFile(join(capture.directory, 'stdout.log'), original)
+    const receiptBytes = await readFile(capture.receipt, 'utf8')
+    await writeFile(capture.receipt, JSON.stringify({ ...JSON.parse(receiptBytes), startedAt: 'altered' }))
+    await event('review_approved', { useReviewedFocused: true }, 1)
+    await writeFile(capture.receipt, receiptBytes)
     const approved = await event('review_approved', { useReviewedFocused: true })
     assert.equal(approved.validation.profile, 'reviewed-focused')
     assert.equal(approved.validation.receipt, capture.receipt)
     assert.deepEqual(approved.validation.checks, approved.focusedValidation.checks)
     await event('validation_refreshed', { validation: approved.validation }, 1)
   } else {
-    finalCapture = f.run('run', ['--kind', 'gate', '--', process.execPath, '-e', 'console.log("full gate")'])
+    finalCapture = f.run('run', ['--kind', 'gate', '--', process.execPath, '-e', 'require("node:fs").appendFileSync(".delivery/executions","gate\\n");console.log("full gate")'])
     const validation = { kind: 'required_gate', result: 'passed', head: f.head, base: f.head,
       profile: 'full', reason: 'fixture full gate', receipt: finalCapture.receipt,
       checks: [{ command: finalCapture.command, exitCode: 0, receipt: finalCapture.receipt }] }
     await event('review_approved', { validation: { ...validation, checks: focused.checks } }, 1)
     await event('review_approved', { validation })
   }
+  f.git('commit', '--allow-empty', '-m', 'different head')
+  await event('start_shipping', {}, 1)
+  f.git('checkout', '--detach', f.head)
   await event('start_shipping', {})
+  assert.equal(await readFile(join(f.root, '.delivery/executions'), 'utf8'), reuse ? 'focused\n' : 'focused\ngate\n')
   const shipping = { mergeCommit: f.head, pr: 'https://example.test/pr/1' }
   await event('shipped', shipping, 1)
   const unsafeArchive = join(f.root, '.delivery/archive')
@@ -134,4 +144,5 @@ for (const reuse of [false, true]) test(`exact-head evidence survives review, sh
   stored.worktree = join(f.root, 'removed-worktree')
   await writeDeliveryState(f.root, stored)
   assert.equal((await event('shipped', { ...shipping, evidenceArchive: archive })).state, 'DONE')
+  assert.equal(await readFile(join(f.root, '.delivery/executions'), 'utf8'), reuse ? 'focused\n' : 'focused\ngate\n')
 })

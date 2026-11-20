@@ -396,6 +396,29 @@ cannot establish passing focused/gate evidence for a commit. Where project
 instructions permit it, run the focused handoff checks once on the committed clean
 head. Any later commit needs its own proof.
 
+Before executing a required check, inspect its existing raw receipt. Verify the
+same card, scope/command, base/head, kind, clean unchanged sources and raw hashes
+with `delivery-evidence.mjs verify`; also enforce project freshness, environment
+and coverage requirements. The state CLI's `review-ready` and phase events check
+the live worktree and stored receipt hashes. Verification does not execute the
+captured command. A phase/agent handoff alone is no reason to rerun a passing
+check. Reviewers independently assess the same objective bundles. Execute again
+only for missing/invalidated proof, an explicit project requirement or a concrete
+defect/coverage gap. Retain failed evidence; never retry merely to obtain green.
+Do not promote precommit or previous-head proof to focused/gate evidence, or
+substitute focused proof for a separate gate outside `reviewed-focused` eligibility.
+Critical and failed-gate/human-authorized recovery still require their full gates.
+Required CI in another environment remains separate validation.
+
+To inspect cost, use `delivery-state.mjs show` for registered receipt paths and
+read the bundles' `startedAt`, `finishedAt`, `command`, `kind` and result. Count
+one execution per original command bundle, deduplicating repeated references and
+archived copies by the original path and receipt hash. `verify`, `review-ready`
+and state transitions are verification/reuse, not new test executions. Compare
+separate bundles for the same command/pair/environment to investigate repeats;
+keep local runs and CI distinct. Timestamps describe captured elapsed time, not
+measured savings; report savings only from a comparable before/after measurement.
+
 Each validation check carries the helper's returned `command`, `exitCode` and
 `receipt`. New evidence-required states verify their card/base/head/kind, clean
 snapshot and raw files at implementation/rework handoff, review-ready, approval

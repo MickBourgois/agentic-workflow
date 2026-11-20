@@ -65,19 +65,19 @@ test('routine summaries omit full history, diffs, and private runtime fields', (
   assert.equal(JSON.stringify(summary).includes('fixture-do-not-emit'), false)
 })
 
-test('approval verifier fails closed on dirty verifier, stale head or tampered evidence', async () => {
+test('approval verifier fails closed on dirty verifier, stale head, expired or tampered evidence', async () => {
   const directory = await mkdtemp(join(tmpdir(), 'workflow-validation-'))
   const git = (...args) => execFileSync('git', args, { cwd: directory, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }).trim()
   git('init'); git('config', 'user.email', 'fixture@example.test'); git('config', 'user.name', 'Fixture')
   await writeFile(join(directory, '.gitignore'), 'proof/\n')
-  const script = `const args=process.argv;console.log(JSON.stringify({result:'passed',card:args[args.indexOf('--card')+1],head:args[args.indexOf('--head')+1],binding:'proof/binding.json'}))`
+  const script = `import {readFileSync} from 'node:fs';const args=process.argv;const proof=JSON.parse(readFileSync('proof/receipt.json'));console.log(JSON.stringify({result:proof.expiresAt>Date.now()?'passed':'expired',card:args[args.indexOf('--card')+1],head:args[args.indexOf('--head')+1],binding:'proof/binding.json'}))`
   await writeFile(join(directory, 'verify.mjs'), script)
   git('add', '.gitignore', 'verify.mjs'); git('commit', '-m', 'fixture')
   const head = git('rev-parse', 'HEAD')
   const state = { card: 'PROJ-301', baseSha: head, currentHead: head, worktree: directory }
   const config = { commands: { validationProof: 'verify.mjs' } }
   await mkdir(join(directory, 'proof'))
-  const receipt = '{}', digest = createHash('sha256').update(receipt).digest('hex')
+  const receipt = JSON.stringify({ expiresAt: 8640000000000000 }), digest = createHash('sha256').update(receipt).digest('hex')
   const binding = { result: 'passed', card: state.card, base: head, head, receipt: 'proof/receipt.json', receiptSha256: digest }
   await writeFile(join(directory, 'proof/receipt.json'), receipt)
   await writeFile(join(directory, 'proof/binding.json'), JSON.stringify(binding))
@@ -92,6 +92,11 @@ test('approval verifier fails closed on dirty verifier, stale head or tampered e
     await writeFile(join(directory, 'verify.mjs'), script)
     git('update-index', flag === '--skip-worktree' ? '--no-skip-worktree' : '--no-assume-unchanged', 'verify.mjs')
   }
+  const expired = JSON.stringify({ expiresAt: 0 })
+  await writeFile(join(directory, 'proof/receipt.json'), expired)
+  await writeFile(join(directory, 'proof/binding.json'), JSON.stringify({ ...binding, receiptSha256: createHash('sha256').update(expired).digest('hex') }))
+  assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
+  await writeFile(join(directory, 'proof/binding.json'), JSON.stringify(binding))
   await writeFile(join(directory, 'proof/receipt.json'), 'tampered')
   assert.throws(() => checkProjectValidation(state, config), /PROJECT_VALIDATION_CHECK_FAILED/)
   await writeFile(join(directory, 'proof/receipt.json'), receipt)
