@@ -8,7 +8,8 @@ delivery behavior.
 ## Unit of work
 
 One delivery orchestration owns exactly one tracker card, one branch, one
-worktree, and one pull request. `DONE`, `NEEDS_HUMAN`, and `FAILED` are terminal.
+worktree, and one pull request. `DONE`, `NEEDS_HUMAN`, and `FAILED` are terminal,
+except the explicit human reconciliation of a failed validation gate below.
 Repository state, Git commits, tracker comments, and compact checkpoints are
 shared memory. Agent transcripts are not handoffs.
 
@@ -272,6 +273,53 @@ invalidates the pair too. Unexpected Git changes require reconciliation and fres
 review, never silent edits to frozen SHAs. A gate-triggered correction follows
 the existing bounded rework process after confirmed findings; unresolved scope
 or state mismatches require a human. Keep approvals and gate status distinct.
+
+### Confirmed findings after a failed gate
+
+Use the native `gate_findings` event for a confirmed blocker discovered after
+`reviews_approved`, while VALIDATING. Supply every exact-head reviewer slot in
+`receipts` and the same structured, deduplicated `findings` used by
+`review_findings`. A findings receipt supersedes that slot's prior approval;
+retain every other slot's original receipt unchanged. Never create a passing
+receipt from the failed run.
+
+The additional `failedGate` object contains the raw `gate` bundle's `receipt`
+path (relative to the delivery worktree) and its `receiptSha256`. Verification
+requires the frozen card/base/head, matching live clean branch/worktree snapshot,
+unchanged sources, hashed stdout/stderr/process logs, and an actual completed
+nonzero command exit. Cancelled or timed-out commands are not defect evidence.
+The gate must have run after the saved exact-head approvals. Stored successful
+focused checks and their previously recorded hashes are reverified, even for
+older state policies. Default passing-evidence verification remains strict.
+
+An existing NEEDS_HUMAN stop can use this same event only with explicit human
+authorization, supplied as `authorization: {reference: <decision-reference>,
+reason: <authorized-resume-reason>}` with both strings non-empty. Its last history
+entry must be `needs_human` from VALIDATING, the failed gate must precede that
+stop, and its reason must be `required_gate_failure` or the legacy workflow code
+`workflow_missing_transition_VALIDATING_to_REWORKING_after_required_gate_failure`
+(optionally followed by `:` or `;` and details). Other terminal states, provenance,
+reasons, missing proof, stale heads and exhausted rework budgets cannot resume.
+
+```bash
+node .agent-workflow/bin/delivery-state.mjs event --repo <state-repository> \
+  --card PROJ-123 --event gate_findings --payload-file <private-payload.json>
+```
+
+When upgrading the consumer first would dirty the exact delivery head, execute
+the same `workflow/orchestrator/delivery-state.mjs` from a reviewed canonical
+source commit, with `--repo` pointing to the existing consumer state repository.
+Do not edit state JSON, initialize again, reset counters or change frozen SHAs.
+
+The event retains the old approvals, failed validation, terminal entry, original
+reason and human authorization in local `gateFailures`. It preserves all history,
+limits, fingerprints, escalation and routing. Checkpoints expose terminal reasons
+and the latest failed gate without publishing obsolete approvals. Within budget,
+it enters REWORKING; a VALIDATING delivery at its limit stops NEEDS_HUMAN.
+Rework must produce a new head with passing focused proof, all fresh independent
+review slots and a newly executed full gate before delivery approval and shipping.
+Reviewed-focused reuse cannot replace that gate. Historical failed receipts stay
+failed and must be retained with the delivery's evidence archive.
 
 ### Rework
 

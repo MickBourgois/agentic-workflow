@@ -13,7 +13,7 @@ const assert = (condition, message) => { if (!condition) throw new Error(message
 const git = (cwd, ...args) => execFileSync('git', args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'], maxBuffer: 64 * 1024 * 1024,
   env: { ...process.env, GIT_OPTIONAL_LOCKS: '0' } }).trim()
 
-function snapshot(root) {
+export function evidenceSnapshot(root) {
   const hash = createHash('sha256')
   const paths = git(root, 'ls-files', '--cached', '--others', '--exclude-standard', '-z').split('\0').filter(Boolean).sort()
   for (const path of paths) {
@@ -34,22 +34,44 @@ function snapshot(root) {
     fingerprint: hash.digest('hex') }
 }
 
-export function verifyEvidence({ receipt, card, base, head, kind }) {
+function verifyBundle({ receipt, card, base, head, kind }, failedGate = false) {
   const root = realpathSync(dirname(receipt)), proof = JSON.parse(readFileSync(receipt, 'utf8'))
   assert(proof.version === 1 && proof.card === card && proof.base === base && proof.head === head && proof.kind === kind,
     'evidence identity does not match card/base/head/kind')
   assert(proof.unchanged === true && proof.snapshot.head === head, 'sources changed during evidence capture')
+  assert(Array.isArray(proof.files) && proof.files.length > 0, 'evidence files required')
   if (['focused', 'gate'].includes(kind)) {
-    assert(proof.result === 'passed' && proof.exitCode === 0 && !proof.snapshot.dirty && !proof.snapshot.hiddenIndexFlags, 'clean exact-head passing evidence required')
+    assert(!proof.snapshot.dirty && !proof.snapshot.hiddenIndexFlags, 'clean exact-head evidence required')
+    if (failedGate) {
+      assert(kind === 'gate' && proof.result === 'failed' && Number.isInteger(proof.exitCode) && proof.exitCode > 0
+        && proof.signal === null && proof.timedOut === false && proof.aborted === false && !proof.error,
+      'completed failed gate command required')
+      assert(typeof proof.command === 'string' && proof.command.trim() && Array.isArray(proof.argv) && proof.argv.length > 0,
+        'executed gate command required')
+      assert(proof.files.some(file => file.path === 'process.json'), 'raw process result required')
+    } else assert(proof.result === 'passed' && proof.exitCode === 0, 'clean exact-head passing evidence required')
     assert(proof.files.some(file => file.path === 'stdout.log') && proof.files.some(file => file.path === 'stderr.log'), 'raw command logs required')
   }
-  assert(Array.isArray(proof.files) && proof.files.length > 0, 'evidence files required')
   for (const file of proof.files) {
     const actual = realpathSync(resolve(root, file.path)), part = relative(root, actual)
     assert(part && !part.startsWith('..') && !isAbsolute(part), 'evidence file escapes bundle')
     assert(digest(readFileSync(actual)) === file.sha256, 'evidence file hash mismatch')
   }
+  if (failedGate) {
+    const process = JSON.parse(readFileSync(resolve(root, 'process.json'), 'utf8'))
+    assert(process.state === 'exited' && process.status === proof.exitCode && process.signal === null
+      && process.timedOut === false && process.aborted === false && process.error === null, 'failed gate process result mismatch')
+  }
   return proof
+}
+
+export function verifyEvidence(options) {
+  return verifyBundle(options)
+}
+
+export function verifyFailedGateEvidence(options) {
+  assert(options.kind === 'gate', 'failed evidence must be a gate')
+  return verifyBundle(options, true)
 }
 
 async function main() {
@@ -71,7 +93,7 @@ async function main() {
   assert(['run', 'collect'].includes(action) && values.length > 0, 'run a command or collect explicit artifact files after --')
   assert(action !== 'collect' || !['focused', 'gate'].includes(identity.kind), 'focused and gate evidence must execute a command')
   assert(realpathSync(git(root, 'rev-parse', '--show-toplevel')) === root, 'evidence repo must be a repository root')
-  const before = snapshot(root)
+  const before = evidenceSnapshot(root)
   assert(before.head === identity.head && git(root, 'rev-parse', '--verify', `${identity.base}^{commit}`) === identity.base,
     'evidence requires actual full base/head SHAs')
   git(root, 'merge-base', '--is-ancestor', identity.base, identity.head)
@@ -117,7 +139,7 @@ async function main() {
     })
     proof.result = 'captured'
   }
-  proof.unchanged = JSON.stringify(before) === JSON.stringify(snapshot(root))
+  proof.unchanged = JSON.stringify(before) === JSON.stringify(evidenceSnapshot(root))
   if (!proof.unchanged) proof.result = 'invalidated'
   proof.finishedAt = new Date().toISOString()
   const receipt = resolve(directory, 'receipt.json')

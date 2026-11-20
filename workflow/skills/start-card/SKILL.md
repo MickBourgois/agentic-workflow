@@ -19,7 +19,9 @@ An explicit card ID is mandatory. Never query the backlog for another card.
 2. Fetch the full card, relations, labels, comments, and status.
 3. Find any marked checkpoint and `.delivery/state/<CARD>.json`. Reconcile
    existing deliveries with their saved routing/limits and live Git, PR, CI,
-   and merge evidence. Return an existing terminal result immediately. Treat an
+   and merge evidence. Return an existing terminal result immediately unless an
+   explicit human decision authorizes the delivery contract's narrowly scoped
+   `gate_findings` recovery of a failed validation gate. Treat an
    existing checkpoint with missing local state as a recovery case.
 4. For a new delivery, require zero open native blockers, no needs-info or
    other project execution hold, and the configured ready or backlog state.
@@ -130,7 +132,18 @@ final archive.
 Run the gate through `delivery-evidence.mjs run --kind gate` and include its
 raw bundle receipt in each check's `receipt`, using the returned `command`.
 Retain the separate project policy receipt/binding when configured.
-On a gate failure stay in VALIDATING; do not dispatch shipping. Any code change
+On a gate failure stay in VALIDATING; do not dispatch shipping. For confirmed
+blocking defects use `gate_findings` with all exact-head scoped reviewer receipts,
+deduplicated findings and `failedGate: {receipt, receiptSha256}` for the real failed
+raw bundle. Retain unaffected slots unchanged. This native event verifies the live
+snapshot and previously hashed focused evidence, preserves the failed gate and
+old approvals, and applies the recorded rework budget. An existing NEEDS_HUMAN
+validation stop additionally requires a human authorization reference and reason,
+with the exact provenance and reason codes documented in the delivery contract.
+Never edit state JSON or initialize again. A reviewed canonical source CLI may
+target the consumer with `--repo` before an installation would dirty its head.
+After this correction a newly executed full gate is required; focused reuse is
+disabled. Any code change
 requires fresh focused checks and all required reviews on the new head. Reconcile
 unexpected commits/base changes with a human rather than editing frozen SHAs or
 reusing old receipts. Resume VALIDATING by verifying its local exact-head
