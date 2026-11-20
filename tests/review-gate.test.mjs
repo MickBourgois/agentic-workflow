@@ -134,6 +134,7 @@ const reviewFindings = () => ({ receipts: [receipt('head', 'A'),
 test('explicit human authorization adds exactly one cycle, preserving the automatic limit and durable state', () => {
   const state = { ...reviewing('critical'), reworkCycles: 1, escalationCount: 1,
     failureFingerprints: { prior_failure: 2 }, previousReview: { head: 'prior', receipts: [] } }
+  state.policy.evidenceRequired = true
   const original = structuredClone(state), payload = { ...reviewFindings(), reworkAuthorization }
   const next = transitionDeliveryState(state, 'review_findings', payload)
   assert.equal(next.state, 'REWORKING')
@@ -177,6 +178,7 @@ test('explicit human authorization adds exactly one cycle, preserving the automa
 
 test('additional cycle authorization rejects early, exceeded, malformed and invalid exact-pair findings', () => {
   const state = { ...reviewing('critical'), reworkCycles: 1 }, payload = { ...reviewFindings(), reworkAuthorization }
+  state.policy.evidenceRequired = true
   for (const authorization of [null, [], {}, { ...reworkAuthorization, reference: '' },
     { ...reworkAuthorization, reason: ' ' }, { ...reworkAuthorization, additionalCycles: 2 },
     { ...reworkAuthorization, additionalCycles: '1' }, { ...reworkAuthorization, additionalCycles: 0 }]) {

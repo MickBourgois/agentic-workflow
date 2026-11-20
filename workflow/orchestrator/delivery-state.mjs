@@ -212,6 +212,8 @@ function authorizeAdditionalRework(state, authorization, event) {
     && authorization.additionalCycles === 1
     && ['reference', 'reason'].every(key => typeof authorization[key] === 'string' && authorization[key].trim()),
   'reworkAuthorization requires explicit human reference, reason and additionalCycles: 1')
+  assert(state.policy?.evidenceRequired === true,
+    'additional rework authorization requires a recorded raw evidence policy; human reconciliation required')
   const previousLimit = reworkLimit(state)
   assert(['REVIEWING', 'VALIDATING'].includes(state.state) && state.reworkCycles === previousLimit,
     'additional rework authorization requires the current rework limit to be reached in REVIEWING or VALIDATING')

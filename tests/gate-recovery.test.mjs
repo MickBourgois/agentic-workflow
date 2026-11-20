@@ -85,6 +85,28 @@ test('recovery refuses legacy evidence policies without rewriting historical sta
   }
 })
 
+test('additional cycles refuse false or missing raw evidence policies atomically for review and gate findings', async () => {
+  const f = await fixture('standard')
+  let reviewing = createDeliveryState({ card: f.card, complexity: 'standard', baseSha: f.base,
+    worktree: f.root, branch: 'codex/fixture' })
+  reviewing = transitionDeliveryState(reviewing, 'start_implementation')
+  reviewing = transitionDeliveryState(reviewing, 'implementation_complete', { commit: f.head, validation: f.state.focusedValidation })
+  const payload = { ...f.payload, reworkAuthorization: { ...f.authorization, additionalCycles: 1 } }
+  for (const event of ['review_findings', 'gate_findings']) {
+    for (const evidenceRequired of [false, undefined]) {
+      const state = structuredClone(event === 'review_findings' ? reviewing : f.state)
+      state.reworkCycles = 1
+      if (evidenceRequired === undefined) delete state.policy.evidenceRequired
+      else state.policy.evidenceRequired = evidenceRequired
+      const original = structuredClone(state)
+      assert.throws(() => transitionDeliveryState(state, event, payload), /recorded raw evidence policy/)
+      assert.deepEqual(state, original, 'rejected authorization must not mutate historical state')
+      await writeDeliveryState(f.root, state)
+      assert.match(await f.event(event, payload, false), /recorded raw evidence policy/)
+    }
+  }
+})
+
 test('native CLI records gate findings in VALIDATING without converting failure to approval', async () => {
   const f = await fixture()
   const next = await f.event('gate_findings', f.payload)
