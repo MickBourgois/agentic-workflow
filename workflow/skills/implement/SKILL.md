@@ -37,7 +37,8 @@ validated delivery routing or the configured implementing state.
    evidence-supported environment correction; a timeout never means success.
 6. Review the staged diff for scope and secrets, create one card-referencing
    commit, and record its SHA.
-7. Run the required focused checks on the clean exact head through
+7. Verify existing required focused receipts for the clean exact base/head using
+   the delivery contract; execute only missing or invalidated checks through
    `delivery-evidence.mjs run --kind focused`. Repair a failed check before any
    review and capture fresh results on the corrected commit.
    Persist `validation.head` equal to the new commit, `validation.focused: passed`,

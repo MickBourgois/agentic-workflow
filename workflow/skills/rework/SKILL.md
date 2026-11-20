@@ -22,9 +22,10 @@ security decisions return `needs_human` without edits.
    optional suggestions do not require edits or consume a cycle.
 4. Add or adjust proof for each correction.
 5. Run checks explicitly required before commit, including a build or early
-   full gate when project/card instructions require it. After committing, run
-   affected proof, relevant lint/type checks and invalidated card checks required
-   for review on the clean new head. Unavailable or failing required checks block handoff.
+   full gate when project/card instructions require it. After committing, verify
+   existing focused receipts for the clean new base/head; run missing or invalidated
+   affected proof, relevant lint/type checks and card checks required for review.
+   Unavailable or failing required checks block handoff.
 6. Use one card/finding-referencing correction commit. After validation, record
    the correction, update the checkpoint to `REVIEWING`, and increment the cycle.
    Set `validation.head` to the new commit and `validation.focused` to `passed`
@@ -36,7 +37,7 @@ Return card, `rework_complete`, previous/new SHA, findings addressed, validation
 and unresolved blockers. Then stop. Rework never starts the next review or ships.
 
 Use the delivery contract's raw evidence protocol for reproductions and required
-artifacts. After committing, capture focused checks on the clean new head and
-include each returned `command`, `exitCode` and `receipt`; never relabel the
+artifacts. After committing, verify or capture focused checks on the clean new
+head and include each returned `command`, `exitCode` and `receipt`; never relabel the
 precommit or previous-head execution. List supplementary proof bundles in
 `validation.artifacts` so shipping verifies their archival too.
