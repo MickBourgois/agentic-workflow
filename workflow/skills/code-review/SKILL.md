@@ -18,6 +18,8 @@ directly affected callers and tests where needed to judge impact.
 For a bounded rework with a verified previous receipt on the same base, inspect
 `git diff <previous-head> <head>`, affected callers and tests, and all findings from that slot’s previous receipt. Review the complete card diff if the base changed, the prior receipt
 is unavailable, scope or impact is uncertain, or a sensitive contract changes.
+A rework originating from `shipping_findings` always requires the complete
+card diff in every slot; previous receipts remain historical context only.
 Always issue a new receipt for the current head.
 
 On re-review, verify prior blockers, the correction and its induced regressions.

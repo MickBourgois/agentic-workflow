@@ -8,8 +8,8 @@ import { fileURLToPath } from 'node:url'
 import { execFileSync } from 'node:child_process'
 import { isDeepStrictEqual } from 'node:util'
 import { ROUTES, WORKFLOW_DEFAULTS } from '../config/defaults.mjs'
-import { assertCard, loadConfig } from './config.mjs'
-import { evidenceSnapshot, verifyEvidence, verifyFailedGateEvidence } from './delivery-evidence.mjs'
+import { assertCard, detectBaseBranch, loadConfig } from './config.mjs'
+import { evidenceSnapshot, verifyEvidence, verifyFailedGateEvidence, verifyPremergeEvidence } from './delivery-evidence.mjs'
 
 export const DELIVERY_STATE_VERSION = 2
 export const TERMINAL_STATES = new Set(['DONE', 'NEEDS_HUMAN', 'FAILED'])
@@ -157,6 +157,7 @@ function validateChecks(checks) {
 
 function reviewedFocusedGate(state) {
   assert(!state.gateFailures?.length, 'failed gate recovery requires a new full gate')
+  assert(!state.shippingFindings?.length, 'premerge recovery requires a new full gate')
   assert(!state.reworkAuthorizations?.length, 'human-authorized rework requires a new full gate')
   assert(state.policy?.reuseFocusedChecks === true && state.policy.evidenceRequired === true
     && ['simple', 'standard'].includes(state.complexity), 'reviewed focused gate not permitted for this delivery')
@@ -177,6 +178,7 @@ function validateGate(state, validation) {
   assert(typeof validation.profile === 'string' && validation.profile.trim()
     && typeof validation.reason === 'string' && validation.reason.trim(), 'gate profile and reason required')
   assert(!state.gateFailures?.length || validation.profile === 'full', 'failed gate recovery requires a new full gate')
+  assert(!state.shippingFindings?.length || validation.profile === 'full', 'premerge recovery requires a new full gate')
   assert(!state.reworkAuthorizations?.length || validation.profile === 'full', 'human-authorized rework requires a new full gate')
   if (validation.profile === 'reviewed-focused') {
     assert(isDeepStrictEqual(validation, reviewedFocusedGate(state)), 'gate must match the reviewed focused evidence')
@@ -215,8 +217,8 @@ function authorizeAdditionalRework(state, authorization, event) {
   assert(state.policy?.evidenceRequired === true,
     'additional rework authorization requires a recorded raw evidence policy; human reconciliation required')
   const previousLimit = reworkLimit(state)
-  assert(['REVIEWING', 'VALIDATING'].includes(state.state) && state.reworkCycles === previousLimit,
-    'additional rework authorization requires the current rework limit to be reached in REVIEWING or VALIDATING')
+  assert(['REVIEWING', 'VALIDATING', 'SHIPPING'].includes(state.state) && state.reworkCycles === previousLimit,
+    'additional rework authorization requires the current rework limit to be reached in REVIEWING, VALIDATING or SHIPPING')
   state.reworkAuthorizations = [...(state.reworkAuthorizations ?? []), {
     reference: authorization.reference, reason: authorization.reason, additionalCycles: 1,
     previousLimit, newLimit: previousLimit + 1, reworkCycles: state.reworkCycles,
@@ -224,7 +226,7 @@ function authorizeAdditionalRework(state, authorization, event) {
   }]
 }
 
-export function transitionDeliveryState(current, event, payload = {}) {
+export function transitionDeliveryState(current, event, payload = {}, config = WORKFLOW_DEFAULTS) {
   assert([1, DELIVERY_STATE_VERSION].includes(current.version), 'unsupported delivery state version; needs human reconciliation')
   assert(!TERMINAL_STATES.has(current.state) || (current.state === 'NEEDS_HUMAN' && event === 'gate_findings'),
     `terminal state ${current.state} cannot transition`)
@@ -271,6 +273,7 @@ export function transitionDeliveryState(current, event, payload = {}) {
       state.state = 'APPROVED'
       break
     }
+    case 'shipping_findings':
     case 'gate_findings':
     case 'review_findings': {
       if (event === 'gate_findings') {
@@ -279,11 +282,16 @@ export function transitionDeliveryState(current, event, payload = {}) {
         state.gateFailures = [...(state.gateFailures ?? []), recovery]
         state.validation = recovery.validation
         delete state.reason
+      } else if (event === 'shipping_findings') {
+        const recovery = checkShippingFindings(state, payload, config)
+        state.shippingFindings = [...(state.shippingFindings ?? []), recovery]
+        state.validation = copy(state.focusedValidation)
+        state.pr = state.pr ?? recovery.pr
       } else requireState(state, 'REVIEWING', event)
       validateReviewReceipts(state, payload.receipts)
       assert(payload.receipts.every(receipt => (receipt.reviewed_base === undefined || receipt.reviewed_base === state.baseSha)
         && (receipt.card === undefined || receipt.card === state.card)), 'review findings pair/card mismatch')
-      validateFocused(event === 'gate_findings' ? state.focusedValidation : state.validation, state.currentHead)
+      validateFocused(event !== 'review_findings' ? state.focusedValidation : state.validation, state.currentHead)
       assert(payload.receipts.some((receipt) => receipt.status === 'findings'), 'findings receipt required')
       validateBlockingFindings(payload.findings)
       const findingKey = (finding) => JSON.stringify([finding.file, finding.line, finding.requirement])
@@ -450,6 +458,11 @@ export function deliverySummary(state) {
     summary.lastGateFailure = { from: failure.from, reason: failure.reason, authorization: failure.authorization,
       validation: failure.validation }
   }
+  if (state.shippingFindings?.length) {
+    const recovery = state.shippingFindings.at(-1)
+    summary.lastShippingFinding = { from: recovery.from, pr: recovery.pr, premergeProof: recovery.premergeProof,
+      base: recovery.validation.base, head: recovery.validation.head }
+  }
   if (state.reworkAuthorizations?.length) {
     summary.reworkLimit = reworkLimit(state)
     summary.lastReworkAuthorization = state.reworkAuthorizations.at(-1)
@@ -526,6 +539,85 @@ function checkGateFindings(state, payload) {
       checks: [{ command: proof.command, exitCode: proof.exitCode, receipt: failed.receipt, receiptSha256: failed.receiptSha256 }] } }
 }
 
+function checkShippingFindings(state, payload, config) {
+  requireState(state, 'SHIPPING', 'shipping_findings')
+  assert(state.version === DELIVERY_STATE_VERSION && state.policy?.evidenceRequired === true,
+    'shipping_findings requires a recorded raw evidence policy; human reconciliation required')
+  assert(!state.mergeCommit && state.pr?.merged !== true && !state.pr?.mergedAt, 'merged delivery cannot rework')
+  validateReviewReceipts(state, state.reviewReceipts)
+  assert(state.reviewReceipts.every(receipt => receipt.status === 'approved'), 'prior exact-head approvals required')
+  validateReviewReceipts(state, payload.receipts)
+  for (const receipt of [...state.reviewReceipts, ...payload.receipts]) {
+    assert((receipt.reviewed_base === undefined || receipt.reviewed_base === state.baseSha)
+      && (receipt.card === undefined || receipt.card === state.card), 'shipping recovery review pair/card mismatch')
+  }
+  for (const receipt of payload.receipts.filter(receipt => receipt.status === 'approved')) {
+    assert(isDeepStrictEqual(receipt, state.reviewReceipts.find(previous => previous.reviewer_slot === receipt.reviewer_slot)),
+      'unchanged reviewer approvals must preserve their original receipt')
+  }
+  validateFocused(state.focusedValidation, state.currentHead)
+  validateGate(state, state.validation)
+  for (const [validation, kind] of [[state.focusedValidation, 'focused'], [state.validation,
+    state.validation.profile === 'reviewed-focused' ? 'focused' : 'gate']]) {
+    assert(validation.checks.every(check => /^[a-f0-9]{64}$/.test(check.receiptSha256 ?? '')),
+      'recorded passing receipt hashes required')
+    checkRecordedEvidence(state, validation, kind)
+  }
+  const { cwd, git } = checkDeliveryWorktree(state)
+  assert(realpathSync(git(['rev-parse', '--show-toplevel'])) === cwd
+    && git(['symbolic-ref', '--short', 'HEAD']) === state.branch, 'unexpected delivery worktree branch/root')
+  const captured = payload.premergeProof
+  assert(typeof captured?.receipt === 'string' && captured.receipt.trim()
+    && /^[a-f0-9]{64}$/.test(captured.receiptSha256 ?? ''), 'premerge receipt and SHA-256 required')
+  const receipt = realpathSync(resolve(cwd, captured.receipt)), part = relative(resolve(cwd, '.delivery/evidence', state.card), receipt)
+  assert(part && !part.startsWith('..') && !isAbsolute(part), 'premerge receipt must belong to delivery evidence')
+  assert(createHash('sha256').update(readFileSync(receipt)).digest('hex') === captured.receiptSha256, 'premerge receipt changed')
+  const proof = verifyPremergeEvidence({ receipt, card: state.card, base: state.baseSha, head: state.currentHead, kind: 'premerge' })
+  assert(isDeepStrictEqual(proof.snapshot, evidenceSnapshot(cwd)), 'premerge worktree snapshot changed')
+  const shipping = state.history.findLast(entry => entry.event === 'start_shipping' && entry.to === 'SHIPPING')
+  const start = Date.parse(proof.startedAt), finish = Date.parse(proof.finishedAt)
+  assert(Number.isFinite(start) && Number.isFinite(finish) && start >= Date.parse(shipping?.at)
+    && finish >= start && finish <= Date.now(), 'premerge proof must follow start_shipping')
+  const pr = JSON.parse(readFileSync(resolve(dirname(receipt), 'stdout.log'), 'utf8'))
+  assert(Number.isInteger(pr.number) && pr.number > 0 && pr.headRefOid === state.currentHead
+    && pr.headRefName === state.branch && pr.state === 'OPEN' && pr.mergedAt === null,
+    'premerge proof requires the current open unmerged PR head/branch')
+  const remote = git(['remote', 'get-url', config.git.remote])
+  const repository = new URL(remote.includes('://') ? remote : remote.replace(/^([^@]+@)?([^:]+):/, 'ssh://$2/'))
+  const url = new URL(pr.url)
+  const repositoryPath = repository.pathname.replace(/\.git$/, '').replace(/\/$/, '')
+  const suffix = url.pathname.slice(repositoryPath.length)
+  assert(url.protocol === 'https:' && !url.username && !url.password && !url.search && !url.hash
+    && url.hostname === repository.hostname && url.pathname.startsWith(`${repositoryPath}/`)
+    && ['/pull/', '/pulls/', '/-/merge_requests/'].some(prefix => suffix === `${prefix}${pr.number}`),
+    'PR URL does not match configured remote repository/number')
+  const baseBranch = config.git.baseBranch === 'auto' ? detectBaseBranch(cwd, config.git.remote) : config.git.baseBranch
+  assert(pr.baseRefName === baseBranch, 'PR base does not match configured base branch')
+  const identity = { number: pr.number, url: pr.url }
+  assert(isDeepStrictEqual(payload.pr, identity), 'PR payload does not match premerge proof')
+  assert(!state.pr || (typeof state.pr === 'string' ? state.pr === pr.url
+    : state.pr.number === pr.number && state.pr.url === pr.url), 'PR does not match recorded delivery PR')
+  return { from: 'SHIPPING', pr: identity,
+    premergeProof: { receipt: captured.receipt, receiptSha256: captured.receiptSha256 }, snapshot: copy(proof.snapshot),
+    validation: copy(state.validation), focusedValidation: copy(state.focusedValidation), reviewReceipts: copy(state.reviewReceipts),
+    confirmedReviewReceipts: copy(payload.receipts), findings: copy(payload.findings) }
+}
+
+function checkArchivedShippingFindings(state, archive) {
+  for (const recovery of state.shippingFindings ?? []) {
+    const historical = { ...state, currentHead: recovery.validation.head, baseSha: recovery.validation.base }
+    checkRecordedEvidence(historical, recovery.focusedValidation, 'focused', archive)
+    checkRecordedEvidence(historical, recovery.validation,
+      recovery.validation.profile === 'reviewed-focused' ? 'focused' : 'gate', archive)
+    const original = resolve(state.worktree, recovery.premergeProof.receipt)
+    const receipt = resolve(archive, basename(dirname(original)), 'receipt.json')
+    const proof = verifyPremergeEvidence({ receipt, card: state.card, base: historical.baseSha, head: historical.currentHead, kind: 'premerge' })
+    assert(createHash('sha256').update(readFileSync(receipt)).digest('hex') === recovery.premergeProof.receiptSha256,
+      'archived premerge receipt changed')
+    assert(isDeepStrictEqual(proof.snapshot, recovery.snapshot), 'archived premerge snapshot changed')
+  }
+}
+
 function checkArchivedGateFailures(state, archive) {
   for (const failure of state.gateFailures ?? []) {
     const validation = failure.validation
@@ -562,6 +654,10 @@ function checkRecordedEvidence(state, validation, kind, archive) {
     const receipt = archive ? resolve(archive, basename(dirname(original)), 'receipt.json') : original
     const proof = verifyEvidence({ receipt, card: state.card, base: state.baseSha, head: state.currentHead, kind })
     assert(proof.command === check.command && proof.exitCode === check.exitCode, 'evidence command/result mismatch')
+    if (kind === 'gate' && state.shippingFindings?.length && !archive) {
+      const approved = state.history.findLast(entry => entry.event === 'reviews_approved' && entry.to === 'VALIDATING')
+      assert(Date.parse(proof.startedAt) >= Date.parse(approved?.at), 'premerge recovery requires a gate after fresh reviews')
+    }
     const hash = createHash('sha256').update(readFileSync(receipt)).digest('hex')
     assert(!check.receiptSha256 || check.receiptSha256 === hash, 'evidence receipt changed')
     if (archive) assert(check.receiptSha256, 'original evidence hash required before archival')
@@ -703,24 +799,23 @@ async function main() {
       current.worktree = realpathSync(current.worktree)
     }
     if (['review_findings', 'reviews_approved'].includes(flags.event)) checkRecordedEvidence(current, current.validation, 'focused')
-    if (['review_approved', 'start_shipping', 'validation_refreshed'].includes(flags.event)) {
+    if (['review_approved', 'start_shipping', 'validation_refreshed', 'shipping_findings'].includes(flags.event)) {
       if (flags.event === 'review_approved') requireState(current, 'VALIDATING', flags.event)
-      current.policy.validationMode = config.delivery.validationMode
-      const validation = payload.validation ?? current.validation
+      if (flags.event !== 'shipping_findings') current.policy.validationMode = config.delivery.validationMode
+      const validation = flags.event === 'shipping_findings' ? current.validation : payload.validation ?? current.validation
       const reusesFocusedChecks = (flags.event === 'review_approved' && payload.useReviewedFocused === true)
         || validation?.profile === 'reviewed-focused'
-      if (reusesFocusedChecks) {
-        checkRecordedEvidence(current, current.focusedValidation, 'focused')
-      } else {
-        checkRecordedEvidence(current, validation, 'gate')
+      if (flags.event !== 'shipping_findings') {
+        if (reusesFocusedChecks) checkRecordedEvidence(current, current.focusedValidation, 'focused')
+        else checkRecordedEvidence(current, validation, 'gate')
       }
       if (config.commands.validationProof && !reusesFocusedChecks) {
-        const verified = checkProjectValidation(current, config, payload.validation?.binding ?? current.validation?.binding)
-        if (flags.event === 'start_shipping') {
+        const verified = checkProjectValidation(current, config, flags.event === 'shipping_findings' ? current.validation?.binding : payload.validation?.binding ?? current.validation?.binding)
+        if (['start_shipping', 'shipping_findings'].includes(flags.event)) {
           assert(current.validation?.bindingSha256 === verified.bindingSha256
             && current.validation?.receiptSha256 === verified.receiptSha256, 'validation evidence changed; refresh required')
         }
-        payload.validation = { ...(payload.validation ?? current.validation), ...verified }
+        if (flags.event !== 'shipping_findings') payload.validation = { ...(payload.validation ?? current.validation), ...verified }
       }
     }
     if (flags.event === 'shipped' && config.commands.completionCheck) {
@@ -737,8 +832,9 @@ async function main() {
         checkRecordedEvidence(current, current.validation, 'gate', payload.evidenceArchive)
       }
       checkArchivedGateFailures(current, payload.evidenceArchive)
+      checkArchivedShippingFindings(current, payload.evidenceArchive)
     }
-    const next = transitionDeliveryState(current, flags.event, payload)
+    const next = transitionDeliveryState(current, flags.event, payload, config)
     if (payload.evidenceArchive) next.evidenceArchive = payload.evidenceArchive
     await writeDeliveryState(repoRoot, next)
     process.stdout.write(`${JSON.stringify(next)}\n`)

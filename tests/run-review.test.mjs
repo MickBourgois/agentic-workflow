@@ -69,6 +69,12 @@ test('a direct standard rework gives the fresh CLI reviewer only that slot’s v
   const incremental = await getPrompt()
   assert.match(incremental, /EXPECTED-BEHAVIOR/)
   assert.doesNotMatch(incremental, /PRIVATE-OTHER-SLOT/)
+  f.state.shippingFindings = [{ from: 'SHIPPING', validation: { base: f.base, head: prior } }]
+  await writeDeliveryState(f.repo, f.state)
+  const premerge = await getPrompt()
+  assert.match(premerge, /complete diff review of the card/)
+  assert.doesNotMatch(premerge, /EXPECTED-BEHAVIOR|PRIVATE-OTHER-SLOT/)
+  delete f.state.shippingFindings
   f.state.previousReview.head = f.base
   await writeDeliveryState(f.repo, f.state)
   const full = await getPrompt()

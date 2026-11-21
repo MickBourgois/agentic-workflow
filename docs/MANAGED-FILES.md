@@ -25,7 +25,7 @@ To resolve a conflict:
 Obsolete pristine files move to `.agent-workflow/backups/<run>/...`; they are not
 permanently deleted by the updater.
 
-## Updating a consumer to 0.9.1
+## Updating a consumer to 0.9.2
 
 `VERSION`, `package.json` and `package-lock.json` carry the source version. There
 is no committed distribution manifest: `buildPayload()` enumerates canonical
@@ -33,13 +33,13 @@ files and install/update computes the installed manifest and SHA-256 hashes from
 their actual bytes. The website build reads VERSION and is generated/ignored.
 Do not commit temporary consumer copies or their manifests into the source.
 
-For a consumer after 0.9.1 is reviewed and available:
+For a consumer after 0.9.2 is reviewed and available:
 
 1. Inspect consumer instructions, Git status, active deliveries and local workflow
    edits. Use an isolated consumer update branch/worktree. Do not resume an old
    delivery with new semantics until the delivery contract's legacy rules have
    been checked; preserve its runtime files and tracker evidence.
-2. Pull this source checkout, select the reviewed 0.9.1 commit/tag, verify VERSION
+2. Pull this source checkout, select the reviewed 0.9.2 commit/tag, verify VERSION
    and source checks, then run `./update.sh <consumer-worktree-root>` from it.
    No tag is created by preparing this version.
 3. Exit 2 means conflicts: compare the preserved managed file and incoming
