@@ -24,6 +24,13 @@ This gate begins only after adaptive independent review approves the exact head.
   they require neither a code change nor a rework cycle. Respect repository
   thread-resolution rules without relabeling suggestions as defects.
 
+For a confirmed blocker on an open, unmerged exact-head PR, follow
+`shipping_findings` in the delivery contract. Return the real thread and fresh
+provider capture to the orchestrator; do not merge, manufacture a failed gate,
+reset state/limits or rework code in the shipper. After the bounded correction,
+all new-head focused evidence, FULL independent reviews, full gate and required
+CI must pass. Retain historical PASS/CI and already-applied rollout evidence.
+
 ## Merge gate
 
 Immediately before merge verify exact approved head, current/mergeable base,

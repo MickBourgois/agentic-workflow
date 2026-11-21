@@ -393,7 +393,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.9.1`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.9.2`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

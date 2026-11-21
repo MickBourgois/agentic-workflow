@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.2
+
+- Add native `shipping_findings` for confirmed PR blockers before merge, with
+  current open-PR identity, clean exact-head provider capture and passing proof.
+- Preserve historical PASS, CI, rollout references and approvals without forging
+  a failed gate or resetting limits; accept one explicitly authorized cycle at
+  the existing limit through the bounded rework decision contract.
+- Require new focused proof, full fresh reviews and a newly executed full gate
+  after premerge corrections; reverify historical bundles from the archive
+  before DONE, including after worktree removal.
+
 ## 0.9.1
 
 - Add native, evidence-checked `gate_findings` for confirmed blockers found in
