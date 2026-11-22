@@ -325,12 +325,74 @@ failed and must be retained with the delivery's evidence archive. Before DONE,
 the CLI verifies every recorded failed bundle against its historical base/head,
 branch/snapshot, receipt hash and raw file hashes, even after worktree removal.
 
+### Confirmed PR findings before merge
+
+A confirmed P0-P2 PR blocker discovered in SHIPPING uses `shipping_findings`,
+never a synthetic gate failure or a manual state reset. This event is limited to
+format 2 with recorded `policy.evidenceRequired: true`, a live clean unchanged
+worktree and the current open, unmerged PR on the frozen head. DONE, merged PRs,
+terminal stops and other phases cannot use this path.
+
+Immediately before recording the event, capture an actual read-only provider
+query through the existing command evidence helper, for example:
+
+```bash
+node .agent-workflow/bin/delivery-evidence.mjs run --repo <worktree> \
+  --card PROJ-123 --base <frozen-base> --head <approved-head> --kind premerge -- \
+  gh pr view <number> --repo <owner/repository> \
+  --json number,url,headRefOid,headRefName,baseRefName,state,mergedAt
+```
+
+Its stdout must be one JSON object with positive `number`, HTTPS `url`, exact
+`headRefOid` and `headRefName`, configured `baseRefName`, `state: "OPEN"` and
+`mergedAt: null`. The URL repository/number must match the configured Git remote.
+The bundle must follow `start_shipping`, with a successful completed command,
+clean unchanged snapshot and hashed raw stdout/stderr/process files. The helper
+verifies capture integrity, not provider authenticity; the orchestrator must
+inspect that this was the actual provider query and confirm the blocking thread.
+Do not capture credentials or private product payloads. A connector-only export
+must first be retained locally and queried through a real auditable command;
+`collect` or an invented passing command cannot substitute for provider evidence.
+
+Supply `pr: {number, url}`, `premergeProof: {receipt, receiptSha256}`, every
+exact-head independent slot in `receipts`, and the complete deduplicated
+confirmed `findings`, using the review blocking policy. Findings receipts
+supersede their own approvals; unaffected slots retain their original receipt.
+Both passing focused and gate checks and their stored hashes are reverified.
+When configured, `validationProof` is also reverified against its saved hashes.
+The first PR association may be recorded here because older SHIPPING states
+have `pr: null`; an existing PR association must match. Never attach an unrelated
+PR, change the frozen pair or reuse evidence after a provider/head change.
+
+The event preserves previous PASS validation, focused proof, approvals, PR and
+snapshot in private `shippingFindings`. Existing CI, migration/rollout references,
+limits, fingerprints and history remain intact. It makes no claim that the old
+gate failed, cancels no CI and reruns no migration. The generated checkpoint
+exposes only compact recovery provenance and removes reviewer receipts while
+reworking/reviewing. Publish and reread that sanitized checkpoint before dispatch.
+The normal recorded budget applies. At its exact limit only an explicit human
+`reworkAuthorization` with `additionalCycles: 1` can authorize one further cycle;
+without it the event stops NEEDS_HUMAN. No terminal recovery or automatic budget
+extension is added.
+
+Rework requires a new commit and passing focused proof. Every slot must review
+the complete card diff in a fresh context, then a newly executed full gate must
+follow those reviews before approval and shipping. Old approvals, CI and the
+old PASS remain historical evidence of their original head. Observe required CI
+on the new PR head; reconcile any already-applied migration with project rules,
+without replaying it solely because rework occurred. Archive all original
+focused/gate/premerge bundles as well as new evidence before cleanup. Before
+DONE the CLI revalidates their recorded hashes, pair and snapshot, including
+after worktree removal. Historical bindings/rollout artifacts still follow the
+project's archive/completion rules.
+
 ### Rework
 
 At the recorded limit, an explicit human decision may authorize one additional
 correction and its independent review round within the same accepted scope.
 Supply `reworkAuthorization` in the existing `review_findings` (REVIEWING) or
-`gate_findings` (VALIDATING) payload, alongside every exact-head reviewer slot,
+`gate_findings` (VALIDATING), or `shipping_findings` (SHIPPING before merge)
+payload, alongside every exact-head reviewer slot,
 complete confirmed blockers and, for a gate failure, the verified failed bundle:
 
 ```json
@@ -341,7 +403,8 @@ Both strings must be non-empty. The engine records the decision; it never infers
 human permission from a blocker, standing policy or retry request. The orchestrator
 must verify that the cited human instruction authorizes this correction. This
 field is rejected before the effective limit, after it, or in a terminal state;
-it adds no terminal recovery path. Without it, the existing limit stops at
+it adds no terminal recovery path. SHIPPING additionally requires the verified
+open-PR premerge proof described above. Without it, the existing limit stops at
 NEEDS_HUMAN. The automatic `policy.maxReworkCycles` and all consumed counters,
 escalations, fingerprints, prior evidence and history remain intact.
 Local `reworkAuthorizations` retain each decision's reference, reason, event,
@@ -407,7 +470,8 @@ only for missing/invalidated proof, an explicit project requirement or a concret
 defect/coverage gap. Retain failed evidence; never retry merely to obtain green.
 Do not promote precommit or previous-head proof to focused/gate evidence, or
 substitute focused proof for a separate gate outside `reviewed-focused` eligibility.
-Critical and failed-gate/human-authorized recovery still require their full gates.
+Critical work and gate/premerge/human-authorized recovery still require their
+full gates.
 Required CI in another environment remains separate validation.
 
 To inspect cost, use `delivery-state.mjs show` for registered receipt paths and

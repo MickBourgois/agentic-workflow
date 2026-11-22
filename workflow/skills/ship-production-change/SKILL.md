@@ -54,12 +54,27 @@ and mergeability. Confirm merge on the configured base and required deployment/
 safe-smoke proof before setting the card to done. Keep scheduled regression
 results outside this delivery's wait.
 
+For a confirmed blocking PR thread while still SHIPPING and before merge,
+stop merge and return control to the orchestrator with the thread evidence and
+a fresh `premerge` provider command bundle as specified in the delivery contract.
+The native `shipping_findings` event validates the open PR, exact head/branch/base,
+clean snapshot, passing focused/gate proof and all independent slots. It may bind
+the first PR when local `pr` is null. Never invent a failed gate or edit state.
+The existing budget still applies; a further cycle at its limit needs the
+explicit bounded human decision recorded by the orchestrator. New commits require
+new focused proof, every FULL independent review, a new full gate and current-head
+CI. Preserve the old PASS, CI and any applied migration as historical evidence;
+do not replay migrations solely because a correction occurred. Merged PRs and
+terminal states do not qualify. Shipping itself never reworks application code.
+
 ## Cleanup
 
 Before removing the worktree, copy the complete `.delivery/evidence/<CARD>/`
 directory into a durable entry-repository `.delivery/archives/<CARD>/evidence/`,
 preserving every bundle directory/name. Include focused, final-gate and all
-registered supplementary artifacts, plus any earlier rework/failure captures.
+registered supplementary artifacts, plus any earlier rework/failure/premerge captures. Historical successful focused
+and gate bundles referenced by `shippingFindings` must also survive cleanup;
+`shipped` verifies them and the premerge bundle from the archive.
 Verify copied receipts/hashes from the archive; missing or changed files block
 cleanup. Do this even without project validation/completion hooks. Keep private
 raw logs local; only sanitized checkpoints and objective references are shared.

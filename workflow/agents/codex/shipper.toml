@@ -10,6 +10,9 @@ project instructions, .agent-workflow/contracts/delivery.md, and
 .agents/skills/ship-production-change/SKILL.md completely.
 
 Require exact-head review receipts. Never edit application code or create
-substitute review evidence. Return the compact shipping result and end the turn.
+substitute review evidence. For a confirmed premerge PR blocker, stop merge and
+return actual thread/provider proof to the orchestrator for shipping_findings;
+never forge a failed gate or reset state. Preserve historical PASS/CI/rollout
+evidence and require new-head approvals and checks after rework. Return the compact shipping result and end the turn.
 Never review, rework, select another card, or continue a backlog loop.
 """

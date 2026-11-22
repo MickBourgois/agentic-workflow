@@ -13,6 +13,7 @@ const SCRIPT_DIR = dirname(fileURLToPath(import.meta.url))
 const assert = (condition, message) => { if (!condition) throw new Error(message) }
 
 function boundedReworkContext(state, slot) {
+  if (state.shippingFindings?.length) return null
   const previous = state.previousReview
   if (!['simple', 'standard'].includes(state.complexity) || !previous || previous.base !== state.baseSha
     || !previous.head || previous.head === state.baseSha) return null

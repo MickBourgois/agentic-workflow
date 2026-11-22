@@ -192,6 +192,23 @@ While shipping runs, await its result using the observation ownership contract;
 the shipper owns the external watch. Use compact state summaries for routine
 updates and perform the independent terminal audit once.
 
+If the shipper identifies a confirmed blocker before merge, retain SHIPPING
+and use the delivery contract's native `shipping_findings` path. Capture the
+current provider PR identity/head/base/open-unmerged state as a clean hashed
+`premerge` command bundle after `start_shipping`; inspect the actual query and
+thread. Supply `pr`, `premergeProof`, every exact-head slot, complete confirmed
+findings and, only at the exact limit with an explicit human instruction,
+`reworkAuthorization: {reference, reason, additionalCycles: 1}`. Keep unaffected
+slot receipts unchanged. Do not manufacture a gate failure, edit state, reset
+counters or expand scope. Existing terminal stops and merged PRs are ineligible.
+A reviewed canonical CLI may target the existing consumer state via `--repo`
+when an installation would dirty its frozen head. Publish/reread the sanitized
+checkpoint, dispatch a fresh reworker, obtain new focused proof and FULL fresh
+reviews in all slots, then run a NEW full gate after those reviews. Historical
+PASS/CI and applied-migration evidence stay tied to their original head; preserve
+and archive them without replaying deployment work. Resume shipping on the new
+approved head and observe its required CI.
+
 ## 6. Terminal response
 
 ```json

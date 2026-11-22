@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.9.2
+## 0.9.3
 
 - Clarify implement/rework resume instructions: verify valid exact-pair focused
   receipts before executing missing or invalidated checks. Make gate capture
@@ -10,6 +10,17 @@
 - Exercise non-replay across evidence verification, approval, shipping and archival;
   retain rejection of changed receipts, raw output and a different live HEAD.
   No runtime policy change or measured delivery-time savings is claimed.
+
+## 0.9.2
+
+- Add native `shipping_findings` for confirmed PR blockers before merge, with
+  current open-PR identity, clean exact-head provider capture and passing proof.
+- Preserve historical PASS, CI, rollout references and approvals without forging
+  a failed gate or resetting limits; accept one explicitly authorized cycle at
+  the existing limit through the bounded rework decision contract.
+- Require new focused proof, full fresh reviews and a newly executed full gate
+  after premerge corrections; reverify historical bundles from the archive
+  before DONE, including after worktree removal.
 
 ## 0.9.1
 

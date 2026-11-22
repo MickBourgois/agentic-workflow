@@ -74,6 +74,21 @@ export function verifyFailedGateEvidence(options) {
   return verifyBundle(options, true)
 }
 
+export function verifyPremergeEvidence(options) {
+  assert(options.kind === 'premerge', 'premerge evidence required')
+  const proof = verifyEvidence(options)
+  assert(proof.result === 'passed' && proof.exitCode === 0 && !proof.snapshot.dirty && !proof.snapshot.hiddenIndexFlags
+    && proof.signal === null && proof.timedOut === false && proof.aborted === false && !proof.error
+    && typeof proof.command === 'string' && proof.command.trim() && Array.isArray(proof.argv) && proof.argv.length > 0,
+    'completed clean premerge command required')
+  assert(['stdout.log', 'stderr.log', 'process.json'].every(path => proof.files.some(file => file.path === path)),
+    'raw premerge command logs required')
+  const process = JSON.parse(readFileSync(resolve(dirname(options.receipt), 'process.json'), 'utf8'))
+  assert(process.state === 'exited' && process.status === 0 && process.signal === null
+    && process.timedOut === false && process.aborted === false && process.error === null, 'premerge process result mismatch')
+  return proof
+}
+
 async function main() {
   const [action, ...args] = process.argv.slice(2), flags = {}, values = []
   for (let index = 0; index < args.length; index += 2) {
