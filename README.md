@@ -221,6 +221,10 @@ Manual phase commands remain available when deliberately bypassing orchestration
 
 Each manual phase still runs in a new task/context and stops at its contract.
 
+Phase handoffs verify still-valid exact-pair raw receipts before executing missing
+checks; they do not by themselves require another test run. See the delivery
+contract for receipt verification and cost inspection using existing timestamps.
+
 Implementation and rework record successful focused checks for the new commit
 before review, including any build or early gate mandated by project/card
 instructions. A bounded correction may receive an incremental review using only that slot’s own
@@ -393,7 +397,7 @@ and [changelog](CHANGELOG.md), especially before resuming incomplete checkpoints
 
 ## Versioning
 
-The current source version is `0.9.2`. Releases use SemVer tags such as `v0.7.0` and
+The current source version is `0.9.3`. Releases use SemVer tags such as `v0.7.0` and
 `v1.0.0`.
 
 ## Current limitations

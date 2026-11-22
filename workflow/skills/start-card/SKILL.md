@@ -129,7 +129,8 @@ returned binding path in `review_approved` payload `validation.binding`. The
 `review_approved` event verifies that proof before transitioning to `APPROVED`;
 any failure blocks shipping. Preserve the verified binding and receipt for the
 final archive.
-Run the gate through `delivery-evidence.mjs run --kind gate` and include its
+When a new gate execution is needed, capture it through
+`delivery-evidence.mjs run --kind gate` and include its
 raw bundle receipt in each check's `receipt`, using the returned `command`.
 Retain the separate project policy receipt/binding when configured.
 On a gate failure stay in VALIDATING; do not dispatch shipping. For confirmed

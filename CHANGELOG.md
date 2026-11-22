@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.9.3
+
+- Clarify implement/rework resume instructions: verify valid exact-pair focused
+  receipts before executing missing or invalidated checks. Make gate capture
+  conditional on a new execution being required, preserving all project gates.
+- Document cost inspection from existing raw receipt timestamps, deduplicating
+  references and archive copies; verification/reuse is not another test run.
+- Exercise non-replay across evidence verification, approval, shipping and archival;
+  retain rejection of changed receipts, raw output and a different live HEAD.
+  No runtime policy change or measured delivery-time savings is claimed.
+
 ## 0.9.2
 
 - Add native `shipping_findings` for confirmed PR blockers before merge, with
